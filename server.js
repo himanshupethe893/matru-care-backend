@@ -18,6 +18,7 @@ require('dotenv').config();
 
 const app = express();
 
+
 // --- Cloudinary Configuration ---
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -25,7 +26,28 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 // Middleware
-app.use(cors());
+const allowedOrigins = [
+    'http://localhost:3000', // For local backend development
+    'http://localhost:8080', // Common for Flutter web development (if applicable)
+    'http://localhost:5000', // Another common local port
+    'https://your-render-app-name.onrender.com', // Replace with your actual Render app URL
+    'https://your-custom-frontend-domain.com', // If you have a custom frontend domain
+    // Add other specific origins as needed
+];
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps, curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], // Explicitly allow common methods
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token'], // Explicitly allow headers, including your custom auth token
+    credentials: true, // Allow cookies and authentication headers to be sent
+}));
 app.use(bodyParser.json());
 app.use(passport.initialize());
 // app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
