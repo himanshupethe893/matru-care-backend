@@ -499,6 +499,11 @@ app.get('/api/details/mother', auth, async (req, res) => {
 });
 
 
-// const PORT = process.env.PORT || 3000;
-// app.listen(PORT, '0.0.0.0', () => console.log(`Server started on port ${PORT}`));
-// module.exports = app;
+console.log('Attempting to start server...');
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server started successfully on port ${PORT}`);
+}).on('error', (err) => { // Add an error handler for listen
+    console.error('Server failed to start:', err.message);
+});
+console.log('After app.listen call...');
