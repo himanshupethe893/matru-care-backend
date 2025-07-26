@@ -255,7 +255,7 @@ app.post('/api/register', async (req, res) => {
 
         const payload = { user: { id: user.id } };
         // Increased token expiration for better user experience
-        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1d' }, async (err, token) => { 
+        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '9M' }, async (err, token) => { 
             if (err) throw err;
             user.jwtToken = token;
             user.login_date_time = new Date();
