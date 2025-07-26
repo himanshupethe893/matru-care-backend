@@ -33,6 +33,7 @@ const allowedOrigins = [
     'http://localhost:3000', // For local backend development
     'http://localhost:8080', // Common for Flutter web development (if applicable)
     'http://localhost:5000', // Another common local port
+    'http://0.0.0.0', // Replace with your actual frontend domain
     'https://your-render-app-name.onrender.com', // Replace with your actual Render app URL
     'https://your-custom-frontend-domain.com', // If you have a custom frontend domain
     // Add other specific origins as needed
