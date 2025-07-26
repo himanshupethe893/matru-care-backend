@@ -17,7 +17,10 @@ const bcrypt = require('bcrypt');
 require('dotenv').config();
 
 const app = express();
-
+// Add this to your server.js, usually near the other API routes
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
 
 // --- Cloudinary Configuration ---
 cloudinary.config({
