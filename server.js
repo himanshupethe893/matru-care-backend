@@ -33,7 +33,7 @@ const allowedOrigins = [
     'http://localhost:3000', // For local backend development
     'http://localhost:8080', // Common for Flutter web development (if applicable)
     'http://localhost:5000', // Another common local port
-    'http://0.0.0.0', // Replace with your actual frontend domain
+    'http://0.0.0.0:3000', // Replace with your actual frontend domain
     'https://your-render-app-name.onrender.com', // Replace with your actual Render app URL
     'https://your-custom-frontend-domain.com', // If you have a custom frontend domain
     // Add other specific origins as needed
@@ -117,39 +117,7 @@ const MotherDetailsSchema = new mongoose.Schema({
 const MotherDetails = mongoose.model('MotherDetails', MotherDetailsSchema);
 
 
-// --- Passport.js Google OAuth2 Strategy (commented out in your code) ---
-// If you enable this, ensure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are in .env
-// passport.use(new GoogleStrategy({
-//     clientID: process.env.GOOGLE_CLIENT_ID,
-//     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-//     callbackURL: "/auth/google/callback"
-//   },
-//   async (accessToken, refreshToken, profile, done) => {
-//     try {
-//         let user = await User.findOne({ googleId: profile.id });
-//         if (user) {
-//             return done(null, user);
-//         }
-        
-//         user = await User.findOne({ email: profile.emails[0].value });
-//         if (user) {
-//             user.googleId = profile.id;
-//             await user.save();
-//             return done(null, user);
-//         }
 
-//         const newUser = {
-//             googleId: profile.id,
-//             name: profile.displayName,
-//             email: profile.emails[0].value,
-//         };
-//         return done(null, newUser);
-
-//     } catch (err) {
-//         return done(err, false);
-//     }
-//   }
-// ));
 
 
 // --- File Upload (Multer) ---
@@ -163,27 +131,7 @@ const storage = new CloudinaryStorage({
     },
 });
 
-// const upload = multer({
-//     storage: storage,
-//     fileFilter: (req, file, cb) => {
-//         console.log('File MIME Type:', file.mimetype); // ADD THIS LINE FOR DEBUGGING
-//         console.log('Original File Name:', file.originalname); // ADD THIS LINE FOR DEBUGGING
 
-//         // Allow common image MIME types and PDF MIME type
-//         const allowedMimeTypes = /jpeg|jpg|png|gif|webp|pdf/;
-//         const mimetype = allowedMimeTypes.test(file.mimetype);
-
-//         // Allow common image extensions and PDF extension
-//         const allowedExtensions = /.\.(jpg|jpeg|png|gif|pdf)$/i;
-//         const extname = allowedExtensions.test(path.extname(file.originalname));
-
-//         if (mimetype && extname) {
-//             return cb(null, true);
-//         } else {
-//             cb(new Error("File upload only supports image (JPG, JPEG, PNG, GIF, WebP) and PDF formats."), false);
-//         }
-//     }
-// });
 
 const upload = multer({
     storage: storage,
@@ -477,16 +425,7 @@ app.post('/api/details/mother', auth, upload.fields([{ name: 'sonography_report'
     }
 });
 
-// app.get('/api/details/mother', auth, async (req, res) => {
-//     try {
-//         const details = await MotherDetails.findOne({ userId: req.user.id }).populate('assigned_doctor', 'name');
-//         if (!details) return res.status(404).json({ msg: 'Details not found' });
-//         res.json(details);
-//     } catch (err) {
-//         console.error(err.message);
-//         res.status(500).send('Server Error');
-//     }
-// });
+
 // GET route for mother details remains the same
 app.get('/api/details/mother', auth, async (req, res) => {
     try {
