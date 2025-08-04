@@ -465,6 +465,7 @@ const path = require('path');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('cloudinary').v2;
 // const fs = require('fs');
+const axios = require('axios');
 const bcrypt = require('bcrypt');
 
 require('dotenv').config();
@@ -922,3 +923,32 @@ app.listen(PORT, () => {
     console.error('Server failed to start:', err.message);
 });
 console.log('After app.listen call...');
+// NEW: Route for searching YouTube videos
+app.get('/api/Youtube', auth, async (req, res) => {
+    const { q: searchQuery } = req.query; // Get search query from request
+
+    if (!searchQuery) {
+        return res.status(400).json({ msg: 'A search query is required.' });
+    }
+
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(searchQuery)}&key=${apiKey}&type=video&maxResults=15`;
+
+    try {
+        const response = await axios.get(url);
+        
+        // Map the complex YouTube API response to a simple format
+        const videos = response.data.items.map(item => ({
+            videoId: item.id.videoId,
+            title: item.snippet.title,
+            channel: item.snippet.channelTitle,
+            thumbnailUrl: item.snippet.thumbnails.high.url,
+        }));
+
+        res.json(videos);
+
+    } catch (error) {
+        console.error('YouTube API Error:', error.response ? error.response.data : error.message);
+        res.status(500).send('Error fetching videos from YouTube.');
+    }
+});
