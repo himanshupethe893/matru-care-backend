@@ -452,7 +452,6 @@
 /////////////////////////////////////////////////////////////////////////////////////////
 
 // server.js
-
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -464,18 +463,22 @@ const multer = require('multer');
 const path = require('path');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('cloudinary').v2;
-// const fs = require('fs');
 const axios = require('axios');
 const bcrypt = require('bcrypt');
+const http = require('http');
+const { Server } = require("socket.io");
 
 require('dotenv').config();
 
 const app = express();
-// Add this to your server.js, usually near the other API routes
-app.get('/health', (req, res) => {
-    res.status(200).send('OK');
-});
+const server = http.createServer(app);
 
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 // --- Cloudinary Configuration ---
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -511,11 +514,16 @@ app.use(bodyParser.json());
 app.use(passport.initialize());
 // app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// NEW: Add a check to ensure the MONGO_URI is loaded
+if (!process.env.MONGO_URI) {
+    console.error('\x1b[31m%s\x1b[0m', 'FATAL ERROR: MONGO_URI is not defined in your .env file.');
+    process.exit(1); // Exit the process with a failure code
+}
 
 // --- Database Connection ---
 mongoose.connect(process.env.MONGO_URI, {
     useNewUrlParser: true,
-    // useUnifiedTopology: true,
+    useUnifiedTopology: true,
 }).then(() => console.log('MongoDB connected'))
   .catch(err => console.log(err));
 
@@ -571,7 +579,14 @@ const MotherDetailsSchema = new mongoose.Schema({
 });
 const MotherDetails = mongoose.model('MotherDetails', MotherDetailsSchema);
 
-
+const CallSessionSchema = new mongoose.Schema({
+    callId: { type: String, required: true, unique: true },
+    callerId: { type: String, required: true },
+    calleeId: { type: String, required: true },
+    status: { type: String, enum: ['pending', 'answered', 'declined', 'ended'], default: 'pending' },
+    createdAt: { type: Date, default: Date.now, expires: 3600 }
+});
+const CallSession = mongoose.model('CallSession', CallSessionSchema);
 
 
 
@@ -643,6 +658,27 @@ const auth = (req, res, next) => {
 };
 
 
+
+// --- Socket.IO Connection Logic (remains the same) ---
+io.on('connection', (socket) => {
+    console.log(`User connected: ${socket.id}`);
+    socket.on('join-room', (userId) => {
+        socket.join(userId);
+        console.log(`Socket ${socket.id} joined room for user ${userId}`);
+    });
+    socket.on('webrtc-offer', (data) => {
+        io.to(data.calleeId).emit('webrtc-offer', { offer: data.offer, callerSocketId: socket.id });
+    });
+    socket.on('webrtc-answer', (data) => {
+        io.to(data.callerSocketId).emit('webrtc-answer', { answer: data.answer, calleeSocketId: socket.id });
+    });
+    socket.on('webrtc-ice-candidate', (data) => {
+        io.to(data.targetSocketId).emit('webrtc-ice-candidate', { candidate: data.candidate });
+    });
+    socket.on('disconnect', () => {
+        console.log(`User disconnected: ${socket.id}`);
+    });
+});
 // --- API Routes ---
 
 // Auth Routes
@@ -914,6 +950,79 @@ app.get('/api/details/mother', auth, async (req, res) => {
     }
 });
 
+// REVISED: Generic route for any user to initiate a call
+app.post('/api/call/initiate', auth, async (req, res) => {
+    const { calleeId } = req.body;
+    const callerId = req.user.id; // Get caller's ID from the authenticated token
+
+    if (!calleeId) {
+        return res.status(400).json({ msg: 'Callee ID is required' });
+    }
+
+    try {
+        // Create a unique but consistent call ID regardless of who calls whom
+        const participants = [callerId, calleeId].sort();
+        const callId = `call_${participants[0]}_${participants[1]}`;
+
+        // Create or update a call session
+        await CallSession.findOneAndUpdate(
+            { callId },
+            { callerId, calleeId, status: 'pending' },
+            { new: true, upsert: true }
+        );
+
+        // Fetch caller's details to send their name with the notification
+        const caller = await User.findOne({userId: callerId}).select('name');
+
+        // Notify the callee that there's an incoming call
+        io.to(calleeId).emit('incoming-call', {
+            callId,
+            callerId,
+            callerName: caller ? caller.name : 'Unknown Caller'
+        });
+
+        res.status(200).json({ msg: 'Call initiated', callId });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// NEW: Route for a patient to get their assigned doctor's details
+app.get('/api/mother/doctor', auth, async (req, res) => {
+    try {
+        const motherDetails = await MotherDetails.findOne({ userId: req.user.id })
+                                                 .populate({
+                                                     path: 'assigned_doctor',
+                                                     select: 'userId name'
+                                                 }); // Populate doctor's userId and name
+
+        if (!motherDetails || !motherDetails.assigned_doctor) {
+            return res.status(404).json({ msg: 'No assigned doctor found.' });
+        }
+        
+        // Return only the doctor's information
+        res.json(motherDetails.assigned_doctor);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+app.get('/api/doctor/patients', auth, async (req, res) => {
+    try {
+        const doctor = await DoctorDetails.findOne({ userId: req.user.id });
+        if (!doctor) {
+            return res.status(404).json({ msg: 'Doctor details not found.' });
+        }
+        const patients = await MotherDetails.find({ assigned_doctor: doctor._id })
+                                            .select('userId name email');
+        res.json(patients);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
 
 console.log('Attempting to start server...');
 const PORT = process.env.PORT || 3000;
