@@ -1,5 +1,4 @@
 // // server.js
-
 // const express = require('express');
 // const mongoose = require('mongoose');
 // const cors = require('cors');
@@ -11,17 +10,25 @@
 // const path = require('path');
 // const { CloudinaryStorage } = require('multer-storage-cloudinary');
 // const cloudinary = require('cloudinary').v2;
-// // const fs = require('fs');
+// const axios = require('axios');
 // const bcrypt = require('bcrypt');
+// const http = require('http');
+// const { Server } = require("socket.io");
 
 // require('dotenv').config();
 
 // const app = express();
-// // Add this to your server.js, usually near the other API routes
 // app.get('/health', (req, res) => {
 //     res.status(200).send('OK');
 // });
+// const server = http.createServer(app);
 
+// const io = new Server(server, {
+//     cors: {
+//         origin: "*",
+//         methods: ["GET", "POST"]
+//     }
+// });
 // // --- Cloudinary Configuration ---
 // cloudinary.config({
 //     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -34,6 +41,7 @@
 //     'http://localhost:8080', // Common for Flutter web development (if applicable)
 //     'http://localhost:5000', // Another common local port
 //     'http://0.0.0.0:3000', // Replace with your actual frontend domain
+//     'http://0.0.0.0',
 //     'https://your-render-app-name.onrender.com', // Replace with your actual Render app URL
 //     'https://your-custom-frontend-domain.com', // If you have a custom frontend domain
 //     // Add other specific origins as needed
@@ -56,11 +64,16 @@
 // app.use(passport.initialize());
 // // app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// // NEW: Add a check to ensure the MONGO_URI is loaded
+// if (!process.env.MONGO_URI) {
+//     console.error('\x1b[31m%s\x1b[0m', 'FATAL ERROR: MONGO_URI is not defined in your .env file.');
+//     process.exit(1); // Exit the process with a failure code
+// }
 
 // // --- Database Connection ---
 // mongoose.connect(process.env.MONGO_URI, {
 //     useNewUrlParser: true,
-//     // useUnifiedTopology: true,
+//     useUnifiedTopology: true,
 // }).then(() => console.log('MongoDB connected'))
 //   .catch(err => console.log(err));
 
@@ -116,7 +129,14 @@
 // });
 // const MotherDetails = mongoose.model('MotherDetails', MotherDetailsSchema);
 
-
+// const CallSessionSchema = new mongoose.Schema({
+//     callId: { type: String, required: true, unique: true },
+//     callerId: { type: String, required: true },
+//     calleeId: { type: String, required: true },
+//     status: { type: String, enum: ['pending', 'answered', 'declined', 'ended'], default: 'pending' },
+//     createdAt: { type: Date, default: Date.now, expires: 3600 }
+// });
+// const CallSession = mongoose.model('CallSession', CallSessionSchema);
 
 
 
@@ -188,6 +208,27 @@
 // };
 
 
+
+// // --- Socket.IO Connection Logic (remains the same) ---
+// io.on('connection', (socket) => {
+//     console.log(`User connected: ${socket.id}`);
+//     socket.on('join-room', (userId) => {
+//         socket.join(userId);
+//         console.log(`Socket ${socket.id} joined room for user ${userId}`);
+//     });
+//     socket.on('webrtc-offer', (data) => {
+//         io.to(data.calleeId).emit('webrtc-offer', { offer: data.offer, callerSocketId: socket.id });
+//     });
+//     socket.on('webrtc-answer', (data) => {
+//         io.to(data.callerSocketId).emit('webrtc-answer', { answer: data.answer, calleeSocketId: socket.id });
+//     });
+//     socket.on('webrtc-ice-candidate', (data) => {
+//         io.to(data.targetSocketId).emit('webrtc-ice-candidate', { candidate: data.candidate });
+//     });
+//     socket.on('disconnect', () => {
+//         console.log(`User disconnected: ${socket.id}`);
+//     });
+// });
 // // --- API Routes ---
 
 // // Auth Routes
@@ -375,6 +416,27 @@
 //     }
 // });
 
+// // NEW: Route for a doctor to get their assigned patients
+// app.get('/api/doctor/patients', auth, async (req, res) => {
+//     try {
+//         // 1. Find the doctor's details to get their DoctorDetails _id
+//         const doctor = await DoctorDetails.findOne({ userId: req.user.id });
+//         if (!doctor) {
+//             return res.status(404).json({ msg: 'Doctor details not found for this user.' });
+//         }
+
+//         // 2. Find all mothers (patients) assigned to this doctor
+//         const patients = await MotherDetails.find({ assigned_doctor: doctor._id })
+//                                             .select('name email userId'); // Select the fields you want to return
+
+//         res.json(patients);
+//     } catch (err) {
+//         console.error(err.message);
+//         res.status(500).send('Server Error');
+//     }
+// });
+
+
 // app.get('/api/doctors', auth, async (req, res) => {
 //     try {
 //         // Assuming 'name' is the field you want to select from DoctorDetails
@@ -438,6 +500,79 @@
 //     }
 // });
 
+// // REVISED: Generic route for any user to initiate a call
+// app.post('/api/call/initiate', auth, async (req, res) => {
+//     const { calleeId } = req.body;
+//     const callerId = req.user.id; // Get caller's ID from the authenticated token
+
+//     if (!calleeId) {
+//         return res.status(400).json({ msg: 'Callee ID is required' });
+//     }
+
+//     try {
+//         // Create a unique but consistent call ID regardless of who calls whom
+//         const participants = [callerId, calleeId].sort();
+//         const callId = `call_${participants[0]}_${participants[1]}`;
+
+//         // Create or update a call session
+//         await CallSession.findOneAndUpdate(
+//             { callId },
+//             { callerId, calleeId, status: 'pending' },
+//             { new: true, upsert: true }
+//         );
+
+//         // Fetch caller's details to send their name with the notification
+//         const caller = await User.findOne({userId: callerId}).select('name');
+
+//         // Notify the callee that there's an incoming call
+//         io.to(calleeId).emit('incoming-call', {
+//             callId,
+//             callerId,
+//             callerName: caller ? caller.name : 'Unknown Caller'
+//         });
+
+//         res.status(200).json({ msg: 'Call initiated', callId });
+//     } catch (err) {
+//         console.error(err.message);
+//         res.status(500).send('Server Error');
+//     }
+// });
+
+// // NEW: Route for a patient to get their assigned doctor's details
+// app.get('/api/mother/doctor', auth, async (req, res) => {
+//     try {
+//         const motherDetails = await MotherDetails.findOne({ userId: req.user.id })
+//                                                  .populate({
+//                                                      path: 'assigned_doctor',
+//                                                      select: 'userId name'
+//                                                  }); // Populate doctor's userId and name
+
+//         if (!motherDetails || !motherDetails.assigned_doctor) {
+//             return res.status(404).json({ msg: 'No assigned doctor found.' });
+//         }
+        
+//         // Return only the doctor's information
+//         res.json(motherDetails.assigned_doctor);
+//     } catch (err) {
+//         console.error(err.message);
+//         res.status(500).send('Server Error');
+//     }
+// });
+
+// app.get('/api/doctor/patients', auth, async (req, res) => {
+//     try {
+//         const doctor = await DoctorDetails.findOne({ userId: req.user.id });
+//         if (!doctor) {
+//             return res.status(404).json({ msg: 'Doctor details not found.' });
+//         }
+//         const patients = await MotherDetails.find({ assigned_doctor: doctor._id })
+//                                             .select('userId name email');
+//         res.json(patients);
+//     } catch (err) {
+//         console.error(err.message);
+//         res.status(500).send('Server Error');
+//     }
+// });
 
 // console.log('Attempting to start server...');
 // const PORT = process.env.PORT || 3000;
@@ -447,9 +582,35 @@
 //     console.error('Server failed to start:', err.message);
 // });
 // console.log('After app.listen call...');
+// // NEW: Route for searching YouTube videos
+// app.get('/api/Youtube', auth, async (req, res) => {
+//     const { q: searchQuery } = req.query; // Get search query from request
 
+//     if (!searchQuery) {
+//         return res.status(400).json({ msg: 'A search query is required.' });
+//     }
 
-/////////////////////////////////////////////////////////////////////////////////////////
+//     const apiKey = process.env.YOUTUBE_API_KEY;
+//     const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(searchQuery)}&key=${apiKey}&type=video&maxResults=15`;
+
+//     try {
+//         const response = await axios.get(url);
+        
+//         // Map the complex YouTube API response to a simple format
+//         const videos = response.data.items.map(item => ({
+//             videoId: item.id.videoId,
+//             title: item.snippet.title,
+//             channel: item.snippet.channelTitle,
+//             thumbnailUrl: item.snippet.thumbnails.high.url,
+//         }));
+
+//         res.json(videos);
+
+//     } catch (error) {
+//         console.error('YouTube API Error:', error.response ? error.response.data : error.message);
+//         res.status(500).send('Error fetching videos from YouTube.');
+//     }
+// });
 
 // server.js
 const express = require('express');
@@ -653,6 +814,7 @@ const auth = (req, res, next) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = decoded.user;
         next();
+        console.log("JWT Verification");
     } catch (e) {
         // Log the actual error for debugging
         console.error("JWT Verification Error:", e.message); 
@@ -975,7 +1137,7 @@ app.post('/api/call/initiate', auth, async (req, res) => {
         );
 
         // Fetch caller's details to send their name with the notification
-        const caller = await User.findOne({userId: callerId}).select('name');
+        const caller = await User.findById(callerId).select('name');
 
         // Notify the callee that there's an incoming call
         io.to(calleeId).emit('incoming-call', {
@@ -1029,7 +1191,7 @@ app.get('/api/doctor/patients', auth, async (req, res) => {
 
 console.log('Attempting to start server...');
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Server started successfully on port ${PORT}`);
 }).on('error', (err) => { // Add an error handler for listen
     console.error('Server failed to start:', err.message);
@@ -1064,3 +1226,4 @@ app.get('/api/Youtube', auth, async (req, res) => {
         res.status(500).send('Error fetching videos from YouTube.');
     }
 });
+
