@@ -918,50 +918,50 @@ app.post('/api/logout', auth, async (req, res) => {
 });
 
 // Google Auth Routes
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+// app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
-app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/login', session: false }),
-  (req, res) => {
-    if (req.user.status) { // Existing user
-        const payload = { user: { id: req.user.id } };
-        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1d' }, async (err, token) => {
-            if (err) throw err;
-            req.user.jwtToken = token;
-            req.user.login_date_time = new Date();
-            await req.user.save();
-            res.redirect(`http://0.0.0.0:3000/auth/google/success?token=${token}`);
-        });
-    } else { // New user
-        res.redirect(`http://0.0.0.0:3000/google-register?name=${req.user.name}&email=${req.user.email}&googleId=${req.user.googleId}`);
-    }
-  }
-);
+// app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/login', session: false }),
+//   (req, res) => {
+//     if (req.user.status) { // Existing user
+//         const payload = { user: { id: req.user.id } };
+//         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1d' }, async (err, token) => {
+//             if (err) throw err;
+//             req.user.jwtToken = token;
+//             req.user.login_date_time = new Date();
+//             await req.user.save();
+//             res.redirect(`http://0.0.0.0:3000/auth/google/success?token=${token}`);
+//         });
+//     } else { // New user
+//         res.redirect(`http://0.0.0.0:3000/google-register?name=${req.user.name}&email=${req.user.email}&googleId=${req.user.googleId}`);
+//     }
+//   }
+// );
 
-app.post('/api/google-register', async (req, res) => {
-    const { name, email, googleId, status } = req.body;
-    try {
-        let user = new User({
-            name,
-            email,
-            googleId,
-            status,
-            password: Math.random().toString(36).slice(-8) // Generate random password
-        });
-        await user.save();
+// app.post('/api/google-register', async (req, res) => {
+//     const { name, email, googleId, status } = req.body;
+//     try {
+//         let user = new User({
+//             name,
+//             email,
+//             googleId,
+//             status,
+//             password: Math.random().toString(36).slice(-8) // Generate random password
+//         });
+//         await user.save();
 
-        const payload = { user: { id: user.id } };
-        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1d' }, async (err, token) => {
-            if (err) throw err;
-            user.jwtToken = token;
-            user.login_date_time = new Date();
-            await user.save();
-            res.json({ token, user: { id: user.id, name: user.name, email: user.email, status: user.status } });
-        });
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server error');
-    }
-});
+//         const payload = { user: { id: user.id } };
+//         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1d' }, async (err, token) => {
+//             if (err) throw err;
+//             user.jwtToken = token;
+//             user.login_date_time = new Date();
+//             await user.save();
+//             res.json({ token, user: { id: user.id, name: user.name, email: user.email, status: user.status } });
+//         });
+//     } catch (err) {
+//         console.error(err.message);
+//         res.status(500).send('Server error');
+//     }
+// });
 
 
 // Details Routes
