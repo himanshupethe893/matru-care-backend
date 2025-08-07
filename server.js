@@ -650,21 +650,30 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 // Middleware
-const allowedOrigins = [
-    'http://localhost:3000', // For local backend development
-    'http://localhost:8080', // Common for Flutter web development (if applicable)
-    'http://localhost:5000', // Another common local port
-    'http://0.0.0.0:3000', // Replace with your actual frontend domain
-    'http://0.0.0.0',
-    'https://your-render-app-name.onrender.com', // Replace with your actual Render app URL
-    'https://your-custom-frontend-domain.com', // If you have a custom frontend domain
-    'null'//local testing // Add other specific origins as needed
-];
+// const allowedOrigins = [
+//     'http://localhost:3000', // For local backend development
+//     'http://localhost:8080', // Common for Flutter web development (if applicable)
+//     'http://localhost:5000', // Another common local port
+//     'http://0.0.0.0:3000', // Replace with your actual frontend domain
+//     'http://0.0.0.0',
+//     'https://your-render-app-name.onrender.com', // Replace with your actual Render app URL
+//     'https://your-custom-frontend-domain.com', // If you have a custom frontend domain
+//     'null'//local testing // Add other specific origins as needed
+// ];
+const allowedOrigins = process.env.CORS_ORIGINS 
+    ? process.env.CORS_ORIGINS.split(',') 
+    : [];
+
+console.log('Allowed CORS Origins:', allowedOrigins);
 app.use(cors({
     origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps, curl requests)
-        if (!origin || origin=="null") return callback(null, true);
-        if (allowedOrigins.indexOf(origin) === -1) {
+        if (!origin || allowedOrigins.indexOf(origin) === -1) return callback(null, true);
+        // if (allowedOrigins.indexOf(origin) === -1) {
+        //     const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+        //     return callback(new Error(msg), false);
+        // }
+        else{
             const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
             return callback(new Error(msg), false);
         }
