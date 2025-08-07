@@ -658,12 +658,12 @@ const allowedOrigins = [
     'http://0.0.0.0',
     'https://your-render-app-name.onrender.com', // Replace with your actual Render app URL
     'https://your-custom-frontend-domain.com', // If you have a custom frontend domain
-    // Add other specific origins as needed
+    'null'//local testing // Add other specific origins as needed
 ];
 app.use(cors({
     origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps, curl requests)
-        if (!origin) return callback(null, true);
+        if (!origin || origin=="null") return callback(null, true);
         if (allowedOrigins.indexOf(origin) === -1) {
             const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
             return callback(new Error(msg), false);
