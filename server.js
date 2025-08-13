@@ -612,7 +612,7 @@
 //     }
 // });
 
-// server.js
+// server.js////////////////////////////////////////////////////////////////////////////////
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -1206,6 +1206,39 @@ server.listen(PORT, () => {
     console.error('Server failed to start:', err.message);
 });
 console.log('After app.listen call...');
+
+
+
+
+
+// NEW: Route to get WebRTC ICE server configuration (STUN/TURN)
+app.get('/api/webrtc/ice-servers', auth, (req, res) => {
+    try {
+        // WebRTC requires the password key to be named 'credential'
+        const iceServers = [
+            {
+                urls: process.env.TURN_SERVER_URL,
+                username: process.env.TURN_SERVER_USERNAME,
+                credential: process.env.TURN_SERVER_PASSWORD
+            },
+            // You can add public STUN servers as well, they are free and help find direct paths
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" }
+        ];
+
+        res.json(iceServers);
+
+    } catch (error) {
+        console.error('Error fetching ICE server configuration:', error);
+        res.status(500).send('Server Error');
+    }
+});
+
+
+
+
+
+
 // NEW: Route for searching YouTube videos
 app.get('/api/Youtube', auth, async (req, res) => {
     const { q: searchQuery } = req.query; // Get search query from request
