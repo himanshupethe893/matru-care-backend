@@ -1287,7 +1287,7 @@ app.post('/api/chat/send', auth, async (req, res) => {
             conversationId: conversation._id,
             sender: senderId,
             receiver: receiverId,
-            message,
+            message: encryptedMessage,
         });
 
         conversation.lastMessage = chatMessage._id;
