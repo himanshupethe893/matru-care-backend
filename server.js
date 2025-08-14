@@ -628,8 +628,45 @@ const axios = require('axios');
 const bcrypt = require('bcrypt');
 const http = require('http');
 const { Server } = require("socket.io");
+const crypto = require('crypto');
 
 require('dotenv').config();
+
+// --- NEW: Encryption Setup ---
+// Ensure you have a 32-byte (256-bit) key in your .env file.
+// Example: ENCRYPTION_KEY=abcdefghijklmnopqrstuvwxyz123456
+const algorithm = 'aes-256-cbc';
+const key = Buffer.from(process.env.ENCRYPTION_KEY, 'utf8');
+
+// Encryption function
+function encrypt(text) {
+    // Generate a random 16-byte initialization vector (IV) for each encryption
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv(algorithm, key, iv);
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    // Prepend the IV to the encrypted text (separated by a colon)
+    // This is crucial for decryption
+    return iv.toString('hex') + ':' + encrypted;
+}
+
+// Decryption function
+function decrypt(text) {
+    try {
+        const parts = text.split(':');
+        // The first part is the IV, the second is the encrypted data
+        const iv = Buffer.from(parts.shift(), 'hex');
+        const encryptedText = Buffer.from(parts.join(':'), 'hex');
+        const decipher = crypto.createDecipheriv(algorithm, key, iv);
+        let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        return decrypted;
+    } catch (error) {
+        console.error("Decryption failed:", error.message);
+        // Return the original text or an error message if decryption fails
+        return text; 
+    }
+}
 
 const app = express();
 app.get('/health', (req, res) => {
@@ -691,6 +728,11 @@ app.use(passport.initialize());
 if (!process.env.MONGO_URI) {
     console.error('\x1b[31m%s\x1b[0m', 'FATAL ERROR: MONGO_URI is not defined in your .env file.');
     process.exit(1); // Exit the process with a failure code
+}
+
+if (!process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_KEY.length !== 32) {
+    console.error('\x1b[31m%s\x1b[0m', 'FATAL ERROR: ENCRYPTION_KEY is not defined in your .env file or is not 32 characters long.');
+    process.exit(1);
 }
 
 // --- Database Connection ---
@@ -907,7 +949,7 @@ app.post('/api/login', async (req, res) => {
 
         const payload = { user: { id: user.id } };
         // Increased token expiration for better user experience
-        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1d' }, async (err, token) => { 
+        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8d' }, async (err, token) => { 
             if (err) throw err;
             user.jwtToken = token;
             user.login_date_time = new Date();
@@ -1238,6 +1280,9 @@ app.post('/api/chat/send', auth, async (req, res) => {
             });
         }
 
+        // NEW: Encrypt the message before saving
+        const encryptedMessage = encrypt(message);
+
         const chatMessage = new ChatMessage({
             conversationId: conversation._id,
             sender: senderId,
@@ -1280,8 +1325,14 @@ app.get('/api/chat/history/:userId', auth, async (req, res) => {
             .sort({ timestamp: 1 })
             .populate('sender', 'name')
             .populate('receiver', 'name');
-
-        res.json(messages);
+        
+        // NEW: Decrypt messages before sending// NEW: Decrypt each message before sending it to the client
+        const decryptedMessages = messages.map(msg => {
+            const messageObject = msg.toObject(); // Convert Mongoose document to plain object
+            messageObject.message = decrypt(messageObject.message);
+            return messageObject;
+        });
+        res.json(decryptedMessages);
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server Error');
