@@ -1062,33 +1062,45 @@ app.post('/api/login', async (req, res) => {
         const payload = { user: { id: user.id } };
         const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8d' });
 
-        // --- NEW: Concurrent Session Management Logic ---
         const maxSessions = {
             'Mother': 1,
             'Admin': 1,
             'Doctor': 2
         };
 
-        const limit = maxSessions[user.status] || 1; // Default to 1
-
+        const limit = maxSessions[user.status] || 1;
         let activeSessions = user.activeSessions || [];
-        // Sort sessions by login date (oldest first)
         activeSessions.sort((a, b) => a.loggedInAt - b.loggedInAt);
         
-        // If the number of sessions is at or over the limit, remove the oldest ones
         while (activeSessions.length >= limit) {
-            const removedSession = activeSessions.shift(); // Remove the oldest session
+            const removedSession = activeSessions.shift();
             console.log(
-                `User ${user.email} (${user.status}) exceeded login limit of ${limit}. Logging out from oldest device (logged in at ${removedSession.loggedInAt}).`
+                `User ${user.email} (${user.status}) exceeded login limit. Logging out from oldest device.`
             );
+
+            // --- NEW: EMIT FORCE-LOGOUT EVENT TO THE OLD DEVICE ---
+            try {
+                // Decode the removed token to find the target user ID
+                const decoded = jwt.verify(removedSession.token, process.env.JWT_SECRET);
+                const targetUserId = decoded.user.id;
+                
+                // Emit an event to that user's specific socket room
+                io.to(targetUserId).emit('force-logout', {
+                    message: 'You have been logged out because you signed in on another device.'
+                });
+                console.log(`Emitted 'force-logout' to user room: ${targetUserId}`);
+
+            } catch (e) {
+                // This token is from our DB, so it should be valid. Handle edge cases.
+                console.error('Could not decode token for force-logout event:', e.message);
+            }
+            // --- END OF NEW CODE ---
         }
 
-        // Add the new session
         activeSessions.push({ token: token, loggedInAt: new Date() });
         user.activeSessions = activeSessions;
         
         await user.save();
-        // --- End of Session Management Logic ---
 
         res.json({ token, user: { id: user.id, name: user.name, email: user.email, status: user.status } });
 
