@@ -761,7 +761,21 @@ const CallSessionSchema = new mongoose.Schema({
 });
 const CallSession = mongoose.model('CallSession', CallSessionSchema);
 
+// --- NEW: Mongoose Schemas for Chat ---
+const ChatMessageSchema = new mongoose.Schema({
+    conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatConversation', required: true },
+    sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    receiver: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    message: { type: String, required: true },
+    timestamp: { type: Date, default: Date.now },
+});
+const ChatMessage = mongoose.model('ChatMessage', ChatMessageSchema);
 
+const ChatConversationSchema = new mongoose.Schema({
+    participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }],
+    lastMessage: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatMessage' },
+}, { timestamps: true });
+const ChatConversation = mongoose.model('ChatConversation', ChatConversationSchema);
 
 // --- File Upload (Multer) ---
 // --- UPDATED: File Upload (Multer with Cloudinary Storage for Images and PDFs) ---
@@ -1208,7 +1222,71 @@ server.listen(PORT, () => {
 console.log('After app.listen call...');
 
 
+// --- NEW: Chat Routes ---
+app.post('/api/chat/send', auth, async (req, res) => {
+    const { receiverId, message } = req.body;
+    const senderId = req.user.id;
 
+    try {
+        let conversation = await ChatConversation.findOne({
+            participants: { $all: [senderId, receiverId] },
+        });
+
+        if (!conversation) {
+            conversation = new ChatConversation({
+                participants: [senderId, receiverId],
+            });
+        }
+
+        const chatMessage = new ChatMessage({
+            conversationId: conversation._id,
+            sender: senderId,
+            receiver: receiverId,
+            message,
+        });
+
+        conversation.lastMessage = chatMessage._id;
+
+        await Promise.all([chatMessage.save(), conversation.save()]);
+
+        // Emit the message to the receiver's room
+        io.to(receiverId).emit('receive-chat-message', {
+            sender: senderId,
+            message,
+            timestamp: chatMessage.timestamp,
+        });
+
+        res.status(201).json(chatMessage);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+app.get('/api/chat/history/:userId', auth, async (req, res) => {
+    const loggedInUserId = req.user.id;
+    const otherUserId = req.params.userId;
+
+    try {
+        const conversation = await ChatConversation.findOne({
+            participants: { $all: [loggedInUserId, otherUserId] },
+        });
+
+        if (!conversation) {
+            return res.json([]);
+        }
+
+        const messages = await ChatMessage.find({ conversationId: conversation._id })
+            .sort({ timestamp: 1 })
+            .populate('sender', 'name')
+            .populate('receiver', 'name');
+
+        res.json(messages);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
 
 
 // NEW: Route to get WebRTC ICE server configuration (STUN/TURN)
