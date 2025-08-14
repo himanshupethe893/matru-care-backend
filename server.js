@@ -742,15 +742,30 @@ mongoose.connect(process.env.MONGO_URI, {
 }).then(() => console.log('MongoDB connected'))
   .catch(err => console.log(err));
 
+// // --- Mongoose Schemas (assuming they are the same as provided) ---
+// const UserSchema = new mongoose.Schema({
+//     name: { type: String, required: true },
+//     email: { type: String, required: true, unique: true },
+//     password: { type: String, required: true },
+//     status: { type: String, enum: ['Mother', 'Admin', 'Doctor'], required: true },
+//     login_date_time: { type: Date , required: true, default: Date.now },
+//     jwtToken: { type: String , default: null},
+//     googleId: { type: String, unique: true, sparse: true },
+// });
+// const User = mongoose.model('User', UserSchema);
+
 // --- Mongoose Schemas (assuming they are the same as provided) ---
 const UserSchema = new mongoose.Schema({
-    name: { type: String, required: true },
-    email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
-    status: { type: String, enum: ['Mother', 'Admin', 'Doctor'], required: true },
-    login_date_time: { type: Date , required: true, default: Date.now },
-    jwtToken: { type: String , default: null},
-    googleId: { type: String, unique: true, sparse: true },
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    status: { type: String, enum: ['Mother', 'Admin', 'Doctor'], required: true },
+    googleId: { type: String, unique: true, sparse: true },
+    // REVISED: Store an array of active sessions instead of a single token
+    activeSessions: [{
+        token: { type: String, required: true },
+        loggedInAt: { type: Date, default: Date.now },
+    }],
 });
 const User = mongoose.model('User', UserSchema);
 
@@ -870,23 +885,54 @@ const upload = multer({
 });
 
 
-// --- Middleware to verify token (MOVED TO BE BEFORE ITS USAGE) ---
-const auth = (req, res, next) => {
+// // --- Middleware to verify token (MOVED TO BE BEFORE ITS USAGE) ---
+// const auth = (req, res, next) => {
+//     const token = req.header('x-auth-token');
+//     if (!token) return res.status(401).json({ msg: 'No token, authorization denied' });
+
+//     try {
+//         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+//         req.user = decoded.user;
+//         next();
+//         console.log("JWT Verification");
+//     } catch (e) {
+//         // Log the actual error for debugging
+//         console.error("JWT Verification Error:", e.message); 
+//         res.status(400).json({ msg: 'Token is not valid' });
+//     }
+// };
+
+// --- UPDATED: Middleware to verify token and session validity ---
+const auth = async (req, res, next) => {
     const token = req.header('x-auth-token');
-    if (!token) return res.status(401).json({ msg: 'No token, authorization denied' });
+    if (!token) {
+        return res.status(401).json({ msg: 'No token, authorization denied' });
+    }
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded.user;
+        
+        // Find the user and verify that the token is in their active sessions array
+        const user = await User.findOne({
+            '_id': decoded.user.id,
+            'activeSessions.token': token
+        });
+
+        if (!user) {
+            // This token is either for a non-existent user or for a session that has been logged out.
+            return res.status(401).json({ msg: 'Token is not valid or session has been terminated.' });
+        }
+
+        req.user = decoded.user; // Attach user id to the request
+        req.token = token; // Attach token for potential use in routes (like logout)
         next();
-        console.log("JWT Verification");
+        console.log("JWT Verification successful for user:", decoded.user.id);
     } catch (e) {
-        // Log the actual error for debugging
-        console.error("JWT Verification Error:", e.message); 
-        res.status(400).json({ msg: 'Token is not valid' });
+        // This catches errors from jwt.verify (e.g., malformed token, signature error, expired token)
+        console.error("JWT Verification Error:", e.message);
+        res.status(401).json({ msg: 'Token is not valid.' });
     }
 };
-
 
 
 // --- Socket.IO Connection Logic (remains the same) ---
@@ -911,66 +957,160 @@ io.on('connection', (socket) => {
 });
 // --- API Routes ---
 
+// // Auth Routes
+// app.post('/api/register', async (req, res) => {
+//     const { name, email, password, status } = req.body;
+//     try {
+//         let user = await User.findOne({ email });
+//         if (user) return res.status(400).json({ msg: 'User already exists' });
+
+//         user = new User({ name, email, password, status });
+//         const salt = await bcrypt.genSalt(10);
+//         user.password = await bcrypt.hash(password, salt);
+//         await user.save();
+
+//         const payload = { user: { id: user.id } };
+//         // Increased token expiration for better user experience
+//         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '9M' }, async (err, token) => { 
+//             if (err) throw err;
+//             user.jwtToken = token;
+//             user.login_date_time = new Date();
+//             await user.save();
+//             res.json({ token, user: { id: user.id, name: user.name, email: user.email, status: user.status } });
+//         });
+//     } catch (err) {
+//         console.error(err.message);
+//         res.status(500).send('Server error');
+//     }
+// });
+
+// app.post('/api/login', async (req, res) => {
+//     const { email, password } = req.body;
+//     try {
+//         let user = await User.findOne({ email });
+//         if (!user) return res.status(400).json({ msg: 'Invalid credentials' });
+
+//         const isMatch = await bcrypt.compare(password, user.password);
+//         if (!isMatch) return res.status(400).json({ msg: 'Invalid credentials' });
+
+//         const payload = { user: { id: user.id } };
+//         // Increased token expiration for better user experience
+//         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8d' }, async (err, token) => { 
+//             if (err) throw err;
+//             user.jwtToken = token;
+//             user.login_date_time = new Date();
+//             await user.save();
+//             res.json({ token, user: { id: user.id, name: user.name, email: user.email, status: user.status } });
+//         });
+//     } catch (err) {
+//         console.error(err.message);
+//         res.status(500).send('Server error');
+//     }
+// });
+
+
+
+
+// app.post('/api/logout', auth, async (req, res) => {
+//     try {
+//         // Get the user ID from the authenticated token (req.user.id), not the request body
+//         await User.findByIdAndUpdate(req.user.id, { $unset: { jwtToken: "" } });
+//         res.json({ msg: 'Logged out successfully' });
+//     } catch (err) {
+//         console.error(err.message);
+//         res.status(500).send('Server error');
+//     }
+// });
+
 // Auth Routes
 app.post('/api/register', async (req, res) => {
-    const { name, email, password, status } = req.body;
-    try {
-        let user = await User.findOne({ email });
-        if (user) return res.status(400).json({ msg: 'User already exists' });
+    const { name, email, password, status } = req.body;
+    try {
+        let user = await User.findOne({ email });
+        if (user) return res.status(400).json({ msg: 'User already exists' });
 
-        user = new User({ name, email, password, status });
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(password, salt);
-        await user.save();
+        user = new User({ name, email, password, status });
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(password, salt);
 
-        const payload = { user: { id: user.id } };
-        // Increased token expiration for better user experience
-        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '9M' }, async (err, token) => { 
-            if (err) throw err;
-            user.jwtToken = token;
-            user.login_date_time = new Date();
-            await user.save();
-            res.json({ token, user: { id: user.id, name: user.name, email: user.email, status: user.status } });
-        });
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server error');
-    }
+        const payload = { user: { id: user.id } };
+        
+        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '9M' }, async (err, token) => { 
+            if (err) throw err;
+
+            // REVISED: Add the first session to the activeSessions array
+            user.activeSessions = [{ token: token, loggedInAt: new Date() }];
+
+            await user.save();
+            res.json({ token, user: { id: user.id, name: user.name, email: user.email, status: user.status } });
+        });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
 });
 
 app.post('/api/login', async (req, res) => {
-    const { email, password } = req.body;
-    try {
-        let user = await User.findOne({ email });
-        if (!user) return res.status(400).json({ msg: 'Invalid credentials' });
+    const { email, password } = req.body;
+    try {
+        let user = await User.findOne({ email });
+        if (!user) return res.status(400).json({ msg: 'Invalid credentials' });
 
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(400).json({ msg: 'Invalid credentials' });
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) return res.status(400).json({ msg: 'Invalid credentials' });
 
-        const payload = { user: { id: user.id } };
-        // Increased token expiration for better user experience
-        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8d' }, async (err, token) => { 
-            if (err) throw err;
-            user.jwtToken = token;
-            user.login_date_time = new Date();
-            await user.save();
-            res.json({ token, user: { id: user.id, name: user.name, email: user.email, status: user.status } });
-        });
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server error');
-    }
+        const payload = { user: { id: user.id } };
+        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8d' });
+
+        // --- NEW: Concurrent Session Management Logic ---
+        const maxSessions = {
+            'Mother': 1,
+            'Admin': 1,
+            'Doctor': 2
+        };
+
+        const limit = maxSessions[user.status] || 1; // Default to 1
+
+        let activeSessions = user.activeSessions || [];
+        // Sort sessions by login date (oldest first)
+        activeSessions.sort((a, b) => a.loggedInAt - b.loggedInAt);
+        
+        // If the number of sessions is at or over the limit, remove the oldest ones
+        while (activeSessions.length >= limit) {
+            const removedSession = activeSessions.shift(); // Remove the oldest session
+            console.log(
+                `User ${user.email} (${user.status}) exceeded login limit of ${limit}. Logging out from oldest device (logged in at ${removedSession.loggedInAt}).`
+            );
+        }
+
+        // Add the new session
+        activeSessions.push({ token: token, loggedInAt: new Date() });
+        user.activeSessions = activeSessions;
+        
+        await user.save();
+        // --- End of Session Management Logic ---
+
+        res.json({ token, user: { id: user.id, name: user.name, email: user.email, status: user.status } });
+
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
 });
 
+
 app.post('/api/logout', auth, async (req, res) => {
-    try {
-        // Get the user ID from the authenticated token (req.user.id), not the request body
-        await User.findByIdAndUpdate(req.user.id, { $unset: { jwtToken: "" } });
-        res.json({ msg: 'Logged out successfully' });
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server error');
-    }
+    try {
+        // The 'auth' middleware has already verified the token is valid and attached it to req.token
+        // Use $pull to remove the specific session object from the activeSessions array
+        await User.findByIdAndUpdate(req.user.id, {
+            $pull: { activeSessions: { token: req.token } }
+        });
+        res.json({ msg: 'Logged out successfully' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
 });
 
 // Google Auth Routes
