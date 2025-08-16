@@ -1249,19 +1249,53 @@ app.get('/api/details/doctor', auth, async (req, res) => {
 });
 
 // NEW: Route for a doctor to get their assigned patients
+// app.get('/api/doctor/patients', auth, async (req, res) => {
+//     try {
+//         // 1. Find the doctor's details to get their DoctorDetails _id
+//         const doctor = await DoctorDetails.findOne({ userId: req.user.id });
+//         if (!doctor) {
+//             return res.status(404).json({ msg: 'Doctor details not found for this user.' });
+//         }
+
+//         // 2. Find all mothers (patients) assigned to this doctor
+//         const patients = await MotherDetails.find({ assigned_doctor: doctor._id })
+//                                             .select('name email userId'); // Select the fields you want to return
+
+//         res.json(patients);
+//     } catch (err) {
+//         console.error(err.message);
+//         res.status(500).send('Server Error');
+//     }
+// });
+
+// REVISED: Route for a doctor to get their assigned patients with last message
 app.get('/api/doctor/patients', auth, async (req, res) => {
     try {
-        // 1. Find the doctor's details to get their DoctorDetails _id
         const doctor = await DoctorDetails.findOne({ userId: req.user.id });
         if (!doctor) {
             return res.status(404).json({ msg: 'Doctor details not found for this user.' });
         }
 
-        // 2. Find all mothers (patients) assigned to this doctor
         const patients = await MotherDetails.find({ assigned_doctor: doctor._id })
-                                            .select('name email userId'); // Select the fields you want to return
+                                            .select('userId name email')
+                                            .lean(); // Use .lean() for performance
 
-        res.json(patients);
+        // For each patient, find the conversation and populate the last message
+        const patientsWithLastMessage = await Promise.all(patients.map(async (patient) => {
+            const conversation = await ChatConversation.findOne({
+                participants: { $all: [req.user.id, patient.userId] }
+            }).populate({
+                path: 'lastMessage',
+                select: 'message timestamp' // Select only the fields needed for the preview
+            });
+
+            return {
+                ...patient,
+                lastMessage: conversation ? conversation.lastMessage : null
+            };
+        }));
+
+        res.json(patientsWithLastMessage);
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server Error');
