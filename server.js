@@ -2267,12 +2267,21 @@ app.get('/api/doctor/patients', auth, async (req, res) => {
                 participants: { $all: [doctorUserId, patient.userId] }
             }).populate({
                 path: 'lastMessage',
-                select: 'message timestamp sender' // Get sender to show "You:" prefix if needed
+                select: 'message timestamp sender'
             });
+
+            // --- START OF THE FIX ---
+            let lastMessageObject = null;
+            if (conversation && conversation.lastMessage) {
+                // 1. Convert the Mongoose document to a plain object to make it modifiable
+                lastMessageObject = conversation.lastMessage.toObject();
+                // 2. Decrypt the message content before sending it
+                lastMessageObject.message = decrypt(lastMessageObject.message);
+            }
+            // --- END OF THE FIX ---
 
             let unreadCount = 0;
             if (conversation) {
-                // Count unread messages where the doctor is the receiver
                 unreadCount = await ChatMessage.countDocuments({
                     conversationId: conversation._id,
                     receiver: doctorUserId,
@@ -2282,8 +2291,8 @@ app.get('/api/doctor/patients', auth, async (req, res) => {
 
             return {
                 ...patient,
-                lastMessage: conversation ? conversation.lastMessage : null,
-                unreadCount: unreadCount // Add the unread count to the response
+                lastMessage: lastMessageObject, // Use the new object with the decrypted message
+                unreadCount: unreadCount
             };
         }));
         
