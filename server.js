@@ -1791,12 +1791,26 @@ const CallSessionSchema = new mongoose.Schema({
 const CallSession = mongoose.model('CallSession', CallSessionSchema);
 
 // --- CHANGED: Mongoose Schemas for Chat ---
+// const ChatMessageSchema = new mongoose.Schema({
+//     conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatConversation', required: true },
+//     sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+//     receiver: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+//     message: { type: String, required: true },
+//     read: { type: Boolean, default: false }, // ADDED: To track if a message has been read
+//     timestamp: { type: Date, default: Date.now },
+// });
+// const ChatMessage = mongoose.model('ChatMessage', ChatMessageSchema);
+
+// In server.js
+
+// --- CHANGED: Mongoose Schema for Chat Messages ---
 const ChatMessageSchema = new mongoose.Schema({
     conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatConversation', required: true },
     sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     receiver: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     message: { type: String, required: true },
-    read: { type: Boolean, default: false }, // ADDED: To track if a message has been read
+    // REPLACED 'read' field with a more descriptive 'status' ENUM
+    status: { type: String, enum: ['sent', 'delivered', 'read'], default: 'sent' },
     timestamp: { type: Date, default: Date.now },
 });
 const ChatMessage = mongoose.model('ChatMessage', ChatMessageSchema);
@@ -1920,6 +1934,27 @@ io.on('connection', (socket) => {
     socket.on('join-room', (userId) => {
         socket.join(userId);
         console.log(`Socket ${socket.id} re-joined room for user ${userId}`);
+    });
+    socket.on('delivery_receipt', async (data) => {
+        try {
+            const { messageId } = data;
+            // Find the message and update its status to 'delivered' if it was 'sent'
+            const message = await ChatMessage.findOneAndUpdate(
+                { _id: messageId, status: 'sent' },
+                { $set: { status: 'delivered' } },
+                { new: true }
+            );
+
+            // If a message was found and updated, notify the original sender
+            if (message) {
+                io.to(message.sender.toString()).emit('message_status_update', {
+                    messageId: message._id,
+                    status: 'delivered',
+                });
+            }
+        } catch (error) {
+            console.error('Error processing delivery receipt:', error);
+        }
     });
 
     socket.on('webrtc-offer', (data) => {
@@ -2527,7 +2562,7 @@ app.get('/api/chat/history/:userId', auth, async (req, res) => {
     }
 });
 
-// --- ADDED: New route to mark messages as read ---
+// --- MODIFIED: The '/api/chat/mark-read' route ---
 app.post('/api/chat/mark-read/:otherUserId', auth, async (req, res) => {
     const loggedInUserId = req.user.id;
     const otherUserId = req.params.otherUserId;
@@ -2541,15 +2576,29 @@ app.post('/api/chat/mark-read/:otherUserId', auth, async (req, res) => {
             return res.status(200).json({ msg: 'No conversation found.' });
         }
 
-        // Update messages where the logged-in user was the receiver and status is unread
-        await ChatMessage.updateMany(
-            { 
-                conversationId: conversation._id,
-                receiver: loggedInUserId,
-                read: false 
-            },
-            { $set: { read: true } }
-        );
+        // Find all message IDs that need to be updated
+        const messagesToUpdate = await ChatMessage.find({
+            conversationId: conversation._id,
+            receiver: loggedInUserId,
+            status: { $ne: 'read' } // Update if not already 'read'
+        }).select('_id');
+
+        const messageIdsToUpdate = messagesToUpdate.map(msg => msg._id);
+
+        if (messageIdsToUpdate.length > 0) {
+            // Update their status to 'read'
+            await ChatMessage.updateMany(
+                { _id: { $in: messageIdsToUpdate } },
+                { $set: { status: 'read' } }
+            );
+
+            // --- ADDED: Notify the original sender that messages were read ---
+            io.to(otherUserId).emit('message_status_update', {
+                messageIds: messageIdsToUpdate,
+                status: 'read',
+                conversationPartnerId: loggedInUserId
+            });
+        }
 
         res.status(200).json({ msg: 'Messages marked as read.' });
     } catch (err) {

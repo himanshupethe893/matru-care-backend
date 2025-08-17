@@ -1,0 +1,1338 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backend Test Client</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 1200px; margin: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { background-color: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        h2 { color: #007bff; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 0; }
+        h3 { color: #555; }
+        input, select, button { width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ddd; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #0056b3; }
+        button.secondary { background-color: #6c757d; }
+        button.secondary:hover { background-color: #5a6268; }
+        button.danger { background-color: #dc3545; }
+        button.danger:hover { background-color: #c82333; }
+        #log-container { grid-column: 1 / -1; }
+        #output { background-color: #282c34; color: #abb2bf; padding: 15px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word; font-family: "Courier New", Courier, monospace; min-height: 200px; max-height: 400px; overflow-y: auto; }
+        .hidden { display: none; }
+        #videos { display: flex; gap: 10px; margin-top: 10px;}
+        video { width: 50%; background: #333; border-radius: 4px; }
+        #incoming-call-notice { background-color: #28a745; color: white; padding: 15px; border-radius: 5px; margin-bottom: 10px; }
+        #youtube-results { max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px; }
+        .video-item { border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 5px; display: flex; align-items: center; gap: 10px; }
+        .video-item img { width: 120px; height: 90px; object-fit: cover; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="main-column">
+        <div class="card">
+            <h2>1. Configuration & Status</h2>
+            <label for="apiUrl">Backend URL:</label>
+            <input type="text" id="apiUrl" value="http://localhost:3000">
+            <h3>Auth Status</h3>
+            <p id="auth-status">Not logged in.</p>
+            <p><strong>User ID:</strong> <span id="user-id-display">N/A</span></p>
+            <p><strong>Socket Status:</strong> <span id="socket-status">Disconnected</span></p>
+        </div>
+
+        <div class="card">
+            <h2>2. Authentication</h2>
+            <div id="auth-forms">
+                <h3>Register</h3>
+                <form id="register-form">
+                    <input type="text" id="reg-name" placeholder="Name" required>
+                    <input type="email" id="reg-email" placeholder="Email" required>
+                    <input type="password" id="reg-password" placeholder="Password" required>
+                    <select id="reg-status" required>
+                        <option value="" disabled selected>Select Role</option>
+                        <option value="Mother">Mother</option>
+                        <option value="Doctor">Doctor</option>
+                        <option value="Admin">Admin</option>
+                    </select>
+                    <button type="submit">Register</button>
+                </form>
+                <hr style="margin: 20px 0;">
+                <h3>Login</h3>
+                <form id="login-form">
+                    <input type="email" id="login-email" placeholder="Email" required>
+                    <input type="password" id="login-password" placeholder="Password" required>
+                    <button type="submit">Login with Email</button>
+                </form>
+                <button id="google-login-btn" class="secondary" style="margin-top:10px;">Sign in with Google</button>
+            </div>
+            <div id="logout-section" class="hidden">
+                <button id="logout-btn" class="danger">Logout</button>
+            </div>
+        </div>
+        
+        <div id="details-section" class="card hidden">
+            <h2>3. My Details</h2>
+            <button id="get-my-details-btn">Fetch My Details</button>
+            
+            <form id="mother-details-form" class="hidden" enctype="multipart/form-data">
+                <h3>Mother Details Form</h3>
+                <input type="text" id="mother-contact" placeholder="Contact Number" required>
+                <select id="mother-doctor" required><option value="">Loading Doctors...</option></select>
+                <input type="text" id="mother-asha-name" placeholder="Asha Worker Name" required>
+                <input type="text" id="mother-asha-contact" placeholder="Asha Worker Contact" required>
+                <label for="mother-dop">Date of Pregnancy:</label>
+                <input type="date" id="mother-dop" required>
+                <label for="mother-sonography">Sonography Report (PDF/Image):</label>
+                <input type="file" id="mother-sonography" name="sonography_report" accept="image/*,application/pdf">
+                <label for="mother-other-reports">Other Reports (PDF/Image):</label>
+                <input type="file" id="mother-other-reports" name="other_reports" accept="image/*,application/pdf">
+                
+                <h4>Disease Information</h4>
+                <input type="text" id="mother-hereditary" placeholder="Mother's Hereditary Diseases">
+                <input type="text" id="mother-non-hereditary" placeholder="Mother's Non-Hereditary Diseases">
+                <input type="text" id="father-hereditary" placeholder="Father's Hereditary Diseases">
+                <input type="text" id="father-non-hereditary" placeholder="Father's Non-Hereditary Diseases">
+                
+                <button type="submit">Save Mother Details</button>
+            </form>
+
+            <form id="doctor-details-form" class="hidden">
+                <h3>Doctor Details Form</h3>
+                <input type="text" id="doctor-contact" placeholder="Contact Number" required>
+                <input type="text" id="doctor-hospital" placeholder="Hospital/Clinic Name" required>
+                <input type="text" id="doctor-specialization" placeholder="Specialization" required>
+                <input type="number" id="doctor-experience" placeholder="Years of Experience" required>
+                <input type="text" id="doctor-other" placeholder="Other Details">
+                <input type="text" id="doctor-intro" placeholder="Introduction">
+                <button type="submit">Save Doctor Details</button>
+            </form>
+
+            <form id="admin-details-form" class="hidden">
+                 <h3>Admin Details Form</h3>
+                <input type="text" id="admin-contact" placeholder="Contact Number" required>
+                <input type="text" id="admin-address" placeholder="Address" required>
+                <button type="submit">Save Admin Details</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="main-column">
+        <div id="actions-section" class="card hidden">
+            <h2>4. Actions</h2>
+             <div id="doctor-actions" class="hidden">
+                 <h3>My Patients</h3>
+                <button id="get-my-patients-btn">Get My Assigned Patients</button>
+            </div>
+             <div id="mother-actions" class="hidden">
+                <h3>My Doctor</h3>
+                <button id="get-my-doctor-btn">Get My Assigned Doctor</button>
+            </div>
+        </div>
+
+        <div id="youtube-section" class="card hidden">
+            <h2>5. Youtube</h2>
+            <form id="Youtube-form">
+                <input type="text" id="youtube-query" placeholder="e.g., 'pregnancy nutrition'" required>
+                <button type="submit">Search Videos</button>
+            </form>
+            <div id="youtube-results"></div>
+        </div>
+
+        <div id="call-section" class="card hidden">
+            <h2>6. Video Call (WebRTC)</h2>
+            <div id="incoming-call-notice" class="hidden">
+                <p>Incoming call from <strong id="caller-name"></strong>...</p>
+                <button id="answer-btn">Answer</button>
+                <button id="decline-btn" class="danger">Decline</button>
+            </div>
+
+            <label for="callee-id">User ID to Call:</label>
+            <input type="text" id="callee-id" placeholder="Enter the User ID of the person to call">
+            <button id="call-btn">Start Call</button>
+            <button id="hangup-btn" class="danger hidden">Hang Up</button>
+
+            <div id="videos">
+                <video id="localVideo" autoplay muted playsinline></video>
+                <video id="remoteVideo" autoplay playsinline></video>
+            </div>
+        </div>
+    </div>
+
+    <div id="log-container" class="card">
+        <h2>Live Log & API Responses</h2>
+        <div id="output">Welcome! Perform an action to see logs here.</div>
+    </div>
+
+</div>
+
+<script>
+    // --- DOM Elements ---
+    const apiUrlInput = document.getElementById('apiUrl');
+    const authStatus = document.getElementById('auth-status');
+    const userIdDisplay = document.getElementById('user-id-display');
+    const socketStatus = document.getElementById('socket-status');
+    const output = document.getElementById('output');
+    
+    // Forms & Buttons
+    const registerForm = document.getElementById('register-form');
+    const loginForm = document.getElementById('login-form');
+    const googleLoginBtn = document.getElementById('google-login-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+    const authForms = document.getElementById('auth-forms');
+    const logoutSection = document.getElementById('logout-section');
+    const detailsSection = document.getElementById('details-section');
+
+    const motherDetailsForm = document.getElementById('mother-details-form');
+    const doctorDetailsForm = document.getElementById('doctor-details-form');
+    const adminDetailsForm = document.getElementById('admin-details-form');
+
+    const actionsSection = document.getElementById('actions-section');
+    const motherActions = document.getElementById('mother-actions');
+    const getMyDoctorBtn = document.getElementById('get-my-doctor-btn');
+    const doctorActions = document.getElementById('doctor-actions');
+    const getMyPatientsBtn = document.getElementById('get-my-patients-btn');
+    
+    const youtubeSection = document.getElementById('youtube-section');
+    const youtubeSearchForm = document.getElementById('Youtube-form');
+    const youtubeResults = document.getElementById('youtube-results');
+    
+    const callSection = document.getElementById('call-section');
+    const callBtn = document.getElementById('call-btn');
+    const hangupBtn = document.getElementById('hangup-btn');
+    const answerBtn = document.getElementById('answer-btn');
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const incomingCallNotice = document.getElementById('incoming-call-notice');
+    const callerNameSpan = document.getElementById('caller-name');
+    const calleeIdInput = document.getElementById('callee-id');
+
+
+    // --- State Variables ---
+    let API_URL = apiUrlInput.value;
+    let TOKEN = localStorage.getItem('authToken');
+    let USER = JSON.parse(localStorage.getItem('authUser'));
+    let socket = null;
+    let peerConnection;
+    let localStream;
+    let incomingCallData = null;
+
+    // MODIFIED: This will now be fetched from the backend.
+    let peerConnectionConfig = null;
+
+    // --- Utility Functions ---
+    function log(message) {
+        if (typeof message === 'object') {
+            message = JSON.stringify(message, null, 2);
+        }
+        console.log(message);
+        output.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}\n\n` + output.innerHTML;
+    }
+    
+    // NEW: Function to fetch WebRTC ICE server config from the backend.
+    async function getIceServerConfig() {
+        if (peerConnectionConfig) {
+            log('ICE server config already fetched.');
+            return; // Don't fetch again if we already have it.
+        }
+        try {
+            log('Fetching ICE server configuration from backend...');
+            const servers = await apiRequest('/api/webrtc/ice-servers');
+            peerConnectionConfig = { iceServers: servers };
+            log('ICE server configuration loaded successfully.');
+        } catch (error) {
+            log('CRITICAL: Failed to fetch ICE server configuration. Falling back to public STUN servers. Calls may fail.');
+            // Fallback to public STUN servers if the fetch fails.
+            peerConnectionConfig = {
+                iceServers: [
+                    { 'urls': 'stun:stun.l.google.com:19302' },
+                    { 'urls': 'stun:stun1.l.google.com:19302' }
+                ]
+            };
+            // Re-throw the error to stop the call initiation if the backend endpoint is down.
+            throw new Error("Could not fetch ICE server config from backend.");
+        }
+    }
+
+    apiUrlInput.addEventListener('change', () => {
+        API_URL = apiUrlInput.value;
+        log(`API URL set to: ${API_URL}`);
+    });
+
+    async function apiRequest(endpoint, method = 'GET', body = null, isFormData = false) {
+        const headers = {};
+        if (TOKEN) {
+            headers['x-auth-token'] = TOKEN;
+        }
+        if (!isFormData && body) {
+            headers['Content-Type'] = 'application/json';
+        }
+
+        const config = {
+            method,
+            headers,
+        };
+
+        if (body) {
+            config.body = isFormData ? body : JSON.stringify(body);
+        }
+
+        try {
+            log(`Request: ${method} ${API_URL}${endpoint}`);
+            const response = await fetch(`${API_URL}${endpoint}`, config);
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.msg || `HTTP error! status: ${response.status}`);
+            }
+            log(`Success Response from ${endpoint}:`);
+            log(data);
+            return data;
+        } catch (error) {
+            log(`Error from ${endpoint}: ${error.message}`);
+            throw error;
+        }
+    }
+    
+    function updateUI() {
+        if (TOKEN && USER) {
+            authForms.classList.add('hidden');
+            logoutSection.classList.remove('hidden');
+            detailsSection.classList.remove('hidden');
+            actionsSection.classList.remove('hidden');
+            youtubeSection.classList.remove('hidden');
+            callSection.classList.remove('hidden');
+            
+            authStatus.textContent = `Logged in as ${USER.name} (${USER.status}).`;
+            userIdDisplay.textContent = USER.id;
+            
+            // Show role-specific forms and actions
+            motherDetailsForm.classList.toggle('hidden', USER.status !== 'Mother');
+            doctorDetailsForm.classList.toggle('hidden', USER.status !== 'Doctor');
+            adminDetailsForm.classList.toggle('hidden', USER.status !== 'Admin');
+            
+            motherActions.classList.toggle('hidden', USER.status !== 'Mother');
+            doctorActions.classList.toggle('hidden', USER.status !== 'Doctor');
+            
+            if (USER.status === 'Mother') {
+                loadDoctorsForDropdown();
+            }
+
+        } else {
+            authForms.classList.remove('hidden');
+            logoutSection.classList.add('hidden');
+            detailsSection.classList.add('hidden');
+            actionsSection.classList.add('hidden');
+            youtubeSection.classList.add('hidden');
+            callSection.classList.add('hidden');
+
+            authStatus.textContent = 'Not logged in.';
+            userIdDisplay.textContent = 'N/A';
+        }
+    }
+    
+    // --- Authentication Logic ---
+    registerForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = document.getElementById('reg-name').value;
+        const email = document.getElementById('reg-email').value;
+        const password = document.getElementById('reg-password').value;
+        const status = document.getElementById('reg-status').value;
+        try {
+            const data = await apiRequest('/api/register', 'POST', { name, email, password, status });
+            handleAuthSuccess(data);
+        } catch (error) { /* already logged by apiRequest */ }
+    });
+
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('login-email').value;
+        const password = document.getElementById('login-password').value;
+        try {
+            const data = await apiRequest('/api/login', 'POST', { email, password });
+            handleAuthSuccess(data);
+        } catch (error) { /* already logged by apiRequest */ }
+    });
+
+    googleLoginBtn.addEventListener('click', () => {
+        log('Redirecting to Google for authentication...');
+        window.location.href = `${API_URL}/auth/google`;
+    });
+
+    logoutBtn.addEventListener('click', async () => {
+        try {
+            await apiRequest('/api/logout', 'POST');
+            handleLogout();
+        } catch (error) { /* already logged */ }
+    });
+
+    function handleAuthSuccess(data) {
+        TOKEN = data.token;
+        USER = data.user;
+        localStorage.setItem('authToken', TOKEN);
+        localStorage.setItem('authUser', JSON.stringify(USER));
+        log('Authentication successful.');
+        updateUI();
+        initSocket();
+    }
+    
+    function handleLogout() {
+        log('Logged out successfully.');
+        if(socket) socket.disconnect();
+        TOKEN = null;
+        USER = null;
+        peerConnectionConfig = null; // MODIFIED: Clear the config on logout.
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('authUser');
+        updateUI();
+    }
+    
+    // Check for Google Auth callback on page load
+    window.addEventListener('load', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        if (token) {
+            log('Received token from Google callback.');
+            TOKEN = token;
+            localStorage.setItem('authToken', token);
+            
+            // Manually fetch user details to complete the login process
+            apiRequest('/api/details/mother').catch(() => apiRequest('/api/details/doctor')).catch(() => apiRequest('/api/details/admin')).then(details => {
+                if (details) {
+                    const user = { id: details.userId, name: details.name, email: details.email, status: 'Unknown' }; 
+                    if (details.hospital_clinic_name) user.status = "Doctor";
+                    else if (details.date_of_pregnancy) user.status = "Mother";
+                    else user.status = "Admin";
+                    USER = user;
+                    localStorage.setItem('authUser', JSON.stringify(USER));
+                    handleAuthSuccess({ token, user });
+                }
+            }).catch(() => log("Could not auto-fetch user details. Please log in again or fetch details manually."));
+
+            // Clean up URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+        } else {
+             updateUI();
+             if(TOKEN) initSocket();
+        }
+    });
+
+    // --- Details & Actions Logic ---
+    async function loadDoctorsForDropdown() {
+        try {
+            const doctors = await apiRequest('/api/doctors');
+            const select = document.getElementById('mother-doctor');
+            select.innerHTML = '<option value="">Select a Doctor</option>';
+            doctors.forEach(doc => {
+                const option = document.createElement('option');
+                option.value = doc._id;
+                option.textContent = doc.name;
+                select.appendChild(option);
+            });
+        } catch (error) {
+            log('Failed to load doctors list.');
+        }
+    }
+    
+    document.getElementById('get-my-details-btn').addEventListener('click', async () => {
+        if (!USER) return;
+        const endpoint = `/api/details/${USER.status.toLowerCase()}`;
+        try {
+            await apiRequest(endpoint);
+        } catch (error) {}
+    });
+
+    motherDetailsForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData();
+        formData.append('contact_no', document.getElementById('mother-contact').value);
+        formData.append('assigned_doctor', document.getElementById('mother-doctor').value);
+        formData.append('asha_worker_name', document.getElementById('mother-asha-name').value);
+        formData.append('asha_worker_contact_no', document.getElementById('mother-asha-contact').value);
+        formData.append('date_of_pregnancy', document.getElementById('mother-dop').value);
+        
+        const disease_information = {
+            mother: {
+                hereditary: document.getElementById('mother-hereditary').value,
+                non_hereditary: document.getElementById('mother-non-hereditary').value,
+            },
+            father: {
+                hereditary: document.getElementById('father-hereditary').value,
+                non_hereditary: document.getElementById('father-non-hereditary').value,
+            }
+        };
+        formData.append('disease_information', JSON.stringify(disease_information));
+
+        const sonographyFile = document.getElementById('mother-sonography').files[0];
+        if (sonographyFile) formData.append('sonography_report', sonographyFile);
+        
+        const otherReportsFile = document.getElementById('mother-other-reports').files[0];
+        if (otherReportsFile) formData.append('other_reports', otherReportsFile);
+
+        try {
+            await apiRequest('/api/details/mother', 'POST', formData, true);
+        } catch(error) {}
+    });
+    
+    doctorDetailsForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const body = {
+            contact_no: document.getElementById('doctor-contact').value,
+            hospital_clinic_name: document.getElementById('doctor-hospital').value,
+            specialization: document.getElementById('doctor-specialization').value,
+            years_of_experience: document.getElementById('doctor-experience').value,
+            other_details: document.getElementById('doctor-other').value,
+            introduction: document.getElementById('doctor-intro').value,
+        };
+        try {
+            await apiRequest('/api/details/doctor', 'POST', body);
+        } catch(error) {}
+    });
+    
+    adminDetailsForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const body = {
+            contact_no: document.getElementById('admin-contact').value,
+            address: document.getElementById('admin-address').value,
+        };
+        try {
+            await apiRequest('/api/details/admin', 'POST', body);
+        } catch(error) {}
+    });
+    
+    getMyDoctorBtn.addEventListener('click', () => apiRequest('/api/mother/doctor'));
+    getMyPatientsBtn.addEventListener('click', () => apiRequest('/api/doctor/patients'));
+
+    // --- Youtube Logic ---
+    youtubeSearchForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const query = document.getElementById('youtube-query').value;
+        try {
+            const videos = await apiRequest(`/api/Youtube?q=${encodeURIComponent(query)}`);
+            youtubeResults.innerHTML = '';
+            if (videos.length === 0) {
+                youtubeResults.innerHTML = '<p>No results found.</p>';
+                return;
+            }
+            videos.forEach(video => {
+                const videoEl = document.createElement('div');
+                videoEl.className = 'video-item';
+                videoEl.innerHTML = `
+                    <img src="${video.thumbnailUrl}" alt="Thumbnail">
+                    <div>
+                        <strong>${video.title}</strong>
+                        <p style="margin:2px 0; color: #666;">${video.channel}</p>
+                    </div>
+                `;
+                youtubeResults.appendChild(videoEl);
+            });
+        } catch(error) {}
+    });
+
+    // --- Socket.IO & WebRTC Logic ---
+    function initSocket() {
+        if (socket || !TOKEN) return;
+        log('Initializing socket connection...');
+        socket = io(API_URL);
+
+        socket.on('connect', () => {
+            socketStatus.textContent = `Connected (${socket.id})`;
+            log(`Socket connected. Joining room for user ID: ${USER.id}`);
+            socket.emit('join-room', USER.id);
+        });
+        
+        socket.on('disconnect', () => {
+            socketStatus.textContent = 'Disconnected';
+            log('Socket disconnected.');
+        });
+        
+        setupWebRTCListeners();
+    }
+    
+    function setupWebRTCListeners() {
+        socket.on('incoming-call', (data) => {
+            log(`Incoming call from ${data.callerName} (ID: ${data.callerId})`);
+            incomingCallData = data;
+            callerNameSpan.textContent = data.callerName;
+            incomingCallNotice.classList.remove('hidden');
+        });
+        
+        socket.on('webrtc-offer', async ({ offer, callerSocketId }) => {
+            log(`Received WebRTC offer from ${callerSocketId}`);
+            if(!peerConnection) {
+                await handleIncomingCall(offer, callerSocketId);
+            }
+        });
+        
+        socket.on('webrtc-answer', async ({ answer }) => {
+            log('Received WebRTC answer.');
+            if (peerConnection) {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+            }
+        });
+
+        socket.on('webrtc-ice-candidate', ({ candidate }) => {
+            if (peerConnection && candidate) {
+                log('Received ICE candidate.');
+                peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            }
+        });
+    }
+
+    // MODIFIED: This function now fetches config before creating the peer connection.
+    async function handleIncomingCall(offer, callerSocketId) {
+        log('Handling incoming call offer...');
+        try {
+            await getIceServerConfig();
+        } catch (error) {
+            log("Cannot answer call without ICE server config.");
+            return; // Stop if we can't get the config.
+        }
+        
+        incomingCallData.callerSocketId = callerSocketId;
+        peerConnection = new RTCPeerConnection(peerConnectionConfig);
+        setupPeerConnectionListeners(callerSocketId);
+        
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        
+        await startLocalStream();
+        localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        log('Sending WebRTC answer...');
+        socket.emit('webrtc-answer', { 
+            answer, 
+            callerSocketId: callerSocketId 
+        });
+        hangupBtn.classList.remove('hidden');
+    }
+    
+    function setupPeerConnectionListeners(targetSocketId) {
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+                log('Sending ICE candidate...');
+                socket.emit('webrtc-ice-candidate', {
+                    targetSocketId: targetSocketId,
+                    candidate: event.candidate,
+                });
+            }
+        };
+
+        peerConnection.ontrack = (event) => {
+            log('Received remote stream track.');
+            remoteVideo.srcObject = event.streams[0];
+        };
+    }
+    
+    async function startLocalStream() {
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            localVideo.srcObject = localStream;
+            log('Local media stream started.');
+        } catch (error) {
+            log(`Error getting user media: ${error.message}`);
+            throw error;
+        }
+    }
+
+    // MODIFIED: This version sets up listeners at the correct time to ensure media is received.
+    callBtn.addEventListener('click', async () => {
+        const calleeId = calleeIdInput.value;
+        if (!calleeId) return alert('Please enter a User ID to call.');
+
+        try {
+            // 1. Get TURN server config and local media stream
+            await getIceServerConfig();
+            await startLocalStream();
+
+            // 2. Create the peer connection
+            peerConnection = new RTCPeerConnection(peerConnectionConfig);
+            log('Peer connection created.');
+
+            // 3. IMPORTANT: Set up the 'ontrack' listener IMMEDIATELY.
+            // This ensures you are ready to receive the other person's video/audio.
+            peerConnection.ontrack = (event) => {
+                log('SUCCESS: Remote track received.');
+                // Check to avoid re-assigning the same stream
+                if (remoteVideo.srcObject !== event.streams[0]) {
+                    remoteVideo.srcObject = event.streams[0];
+                    log('Remote video stream attached.');
+                }
+            };
+
+            // 4. Add your local tracks to the connection so you can send your video/audio.
+            // This MUST be done BEFORE creating the offer.
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+            log('Local tracks added to peer connection.');
+
+            // 5. The 'onicecandidate' listener needs the target's socket ID to send candidates.
+            // We can define this listener inside the 'webrtc-answer' handler, where we receive that ID.
+            socket.on('webrtc-answer', async ({ answer, calleeSocketId }) => {
+                log(`Received answer from callee socket: ${calleeSocketId}`);
+                if (peerConnection.signalingState === "have-local-offer") {
+                    
+                    // Now that we have the target's socket ID, set up the candidate listener.
+                    peerConnection.onicecandidate = (event) => {
+                        if (event.candidate) {
+                            log('Sending ICE candidate...');
+                            socket.emit('webrtc-ice-candidate', {
+                                targetSocketId: calleeSocketId,
+                                candidate: event.candidate,
+                            });
+                        }
+                    };
+
+                    // Set the remote description from the answer
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                    log('Remote description (answer) set.');
+                }
+            });
+
+            // 6. Now, create the offer and set it as the local description.
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            log('Local description (offer) created and set.');
+
+            // 7. Finally, send the call initiation request and the offer.
+            await apiRequest('/api/call/initiate', 'POST', { calleeId });
+            log(`Emitting webrtc-offer to user room: ${calleeId}`);
+            socket.emit('webrtc-offer', { offer, calleeId });
+
+            hangupBtn.classList.remove('hidden');
+
+        } catch (error) {
+            log(`Call initiation failed: ${error.message}`);
+        }
+    });
+    
+    answerBtn.addEventListener('click', () => {
+        log('Answering call... a full connection should now be established.');
+        incomingCallNotice.classList.add('hidden');
+    });
+
+    hangupBtn.addEventListener('click', () => {
+        log('Hanging up call.');
+        if (peerConnection) {
+            peerConnection.close();
+            peerConnection = null;
+        }
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+        }
+        localVideo.srcObject = null;
+        remoteVideo.srcObject = null;
+        incomingCallData = null;
+        hangupBtn.classList.add('hidden');
+        incomingCallNotice.classList.add('hidden');
+    });
+</script>
+</body>
+</html> -->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matru Care - Your Personalized Wellness Journey</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="icon" href="matrucare_logo.jpg" type="image/jpg">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        /* Custom styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FFF9F5;
+            color: #4A4A4A;
+        }
+        /* Custom color palette */
+        .matru-pink { color: #F4A7B9; }
+        .matru-orange { background-color: #F9A826; }
+        .matru-orange-hover:hover { background-color: #F59E0B; }
+        .doctor-primary { color: #3B82F6; }
+        .doctor-primary-bg { background-color: #3B82F6; }
+        .doctor-primary-hover:hover { background-color: #2563EB; }
+
+        /* Chat bubble styles */
+        .chat-bubble-sent {
+            background-color: #3B82F6; /* doctor-primary-bg */
+            color: white;
+            border-radius: 20px 20px 5px 20px;
+        }
+        .chat-bubble-received {
+            background-color: #E5E7EB; /* gray-200 */
+            color: #1F2937; /* gray-800 */
+            border-radius: 20px 20px 20px 5px;
+        }
+        .notification-badge {
+            background-color: #EF4444; /* red-500 */
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            position: absolute;
+            top: -5px;
+            right: -5px;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div id="main-app" class="hidden">
+        <header class="sticky top-0 z-40 bg-white/80 backdrop-blur-lg shadow-sm">
+             <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+                <img src="matrucare_logo.jpg" alt="Matru Care Logo" class="h-12 w-auto">
+                <div class="relative">
+                    <button id="profile-button" class="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
+                        <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                    </button>
+                    <div id="profile-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-xl z-50 py-1">
+                        <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Update Profile</a>
+                        <a href="#" id="logout-button" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Logout</a>
+                    </div>
+                </div>
+            </div>
+        </header>
+        <main class="container mx-auto px-4 py-8 pb-24">
+            <section id="home" class="text-center py-16">
+                <h2 class="text-4xl md:text-5xl font-bold matru-pink">Welcome, <span id="mother-name"></span>!</h2>
+                <p class="text-lg text-gray-500 mt-2">Your personalized wellness journey begins here.</p>
+                <button id="mother-chat-button" class="mt-8 bg-pink-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-pink-600 transition-colors">
+                    <i class="fas fa-comment-dots mr-2"></i>Chat with my Doctor
+                </button>
+            </section>
+        </main>
+    </div>
+
+    <div id="doctor-dashboard" class="hidden">
+        <header class="sticky top-0 z-40 bg-white/80 backdrop-blur-lg shadow-sm">
+            <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+                <h1 class="text-2xl font-bold doctor-primary">Doctor Dashboard</h1>
+                <div class="relative">
+                    <button id="doctor-profile-button" class="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
+                         <svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                    </button>
+                    <div id="doctor-profile-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-xl z-50 py-1">
+                        <a href="#" id="update-profile-link" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Update Profile</a>
+                        <a href="#" id="doctor-logout-button" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Logout</a>
+                    </div>
+                </div>
+            </div>
+        </header>
+        <main class="container mx-auto px-4 py-8">
+            <h2 class="text-3xl font-bold text-gray-800 mb-6">Welcome, Dr. <span id="doctor-name"></span>!</h2>
+            <div class="mb-6 border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button id="tab-patients" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg border-blue-500 text-blue-600">Patients</button>
+                    <button id="tab-appointments" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">Appointments</button>
+                    <button id="tab-messages" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 relative">
+                        Messages
+                        <span id="messages-notification-badge" class="hidden notification-badge">!</span>
+                    </button>
+                </nav>
+            </div>
+            <div id="patients-content">
+                <h3 class="text-2xl font-semibold text-gray-700 mb-4">Assigned Patients</h3>
+                <div id="patients-list" class="space-y-4"></div>
+            </div>
+            <div id="appointments-content" class="hidden">
+                 <h3 class="text-2xl font-semibold text-gray-700 mb-4">Upcoming Appointments</h3>
+                 <div class="bg-white p-8 rounded-lg shadow text-center"><p class="text-gray-500">Appointments feature coming soon.</p></div>
+            </div>
+             <div id="messages-content" class="hidden">
+                <h3 class="text-2xl font-semibold text-gray-700 mb-4">Messages</h3>
+                <div id="message-list" class="space-y-4">
+                    <!-- Messages will be dynamically loaded here -->
+                </div>
+            </div>
+            <div id="doctor-details-content" class="hidden">
+                <h3 class="text-2xl font-semibold text-gray-700 mb-4">Update Your Information</h3>
+                <form id="doctor-details-form" class="bg-white p-8 rounded-2xl shadow-lg space-y-4 max-w-2xl mx-auto">
+                     <input type="text" id="doctor-contact" placeholder="Contact Number" class="w-full px-4 py-2 bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <input type="text" id="doctor-hospital" placeholder="Hospital/Clinic Name" class="w-full px-4 py-2 bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <input type="text" id="doctor-specialization" placeholder="Specialization" class="w-full px-4 py-2 bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <input type="number" id="doctor-experience" placeholder="Years of Experience" class="w-full px-4 py-2 bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <textarea id="doctor-introduction" placeholder="Introduce Yourself" rows="4" class="w-full px-4 py-2 bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"></textarea>
+                    <button type="submit" class="w-full doctor-primary-bg text-white font-bold py-3 px-4 rounded-lg doctor-primary-hover transition-colors">Save Changes</button>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <section id="forms-section" class="min-h-screen flex items-center justify-center">
+        <div class="max-w-md w-full p-4">
+            <div id="login-form-container" class="bg-white p-8 rounded-2xl shadow-lg">
+                <h3 class="text-2xl font-bold text-center mb-1 text-gray-700">Welcome to Matru Care</h3>
+                <p class="text-center text-gray-500 mb-6">Sign up or log in to continue.</p>
+                <form id="login-form">
+                    <div id="login-error" class="hidden text-red-500 text-sm text-center mb-4"></div>
+                    <div class="mb-4">
+                        <label for="login-email" class="block text-sm font-medium text-gray-600 mb-1">Email</label>
+                        <input type="email" id="login-email" class="w-full px-4 py-2 bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400" required>
+                    </div>
+                    <div class="mb-6">
+                        <label for="login-password" class="block text-sm font-medium text-gray-600 mb-1">Password</label>
+                        <input type="password" id="login-password" class="w-full px-4 py-2 bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400" required>
+                    </div>
+                    <button type="submit" class="w-full matru-orange text-white font-bold py-3 px-4 rounded-lg matru-orange-hover transition-colors">Log In</button>
+                    <p class="text-center text-sm text-gray-500 mt-4">Don't have an account? <a href="#" id="show-register" class="font-semibold text-pink-500 hover:underline">Sign Up</a></p>
+                </form>
+            </div>
+            <div id="register-form-container" class="hidden bg-white p-8 rounded-2xl shadow-lg">
+                <h3 class="text-2xl font-bold text-center mb-6 text-gray-700">Create Account</h3>
+                <form id="register-form" class="space-y-4">
+                    <div id="register-error" class="hidden text-red-500 text-sm text-center mb-4"></div>
+                    <input type="text" id="register-name" placeholder="Full Name" class="w-full px-4 py-2 bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400" required>
+                    <input type="email" id="register-email" placeholder="Email" class="w-full px-4 py-2 bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400" required>
+                    <input type="password" id="register-password" placeholder="Password" class="w-full px-4 py-2 bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400" required>
+                    <div>
+                        <label for="register-status" class="block text-sm font-medium text-gray-600 mb-1">I am a...</label>
+                        <select id="register-status" class="w-full px-4 py-2 bg-gray-100 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-400">
+                            <option value="Doctor">Doctor</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="w-full matru-orange text-white font-bold py-3 px-4 rounded-lg matru-orange-hover transition-colors">Register</button>
+                    <p class="text-center text-sm text-gray-500 mt-4">Already have an account? <a href="#" id="show-login" class="font-semibold text-pink-500 hover:underline">Log In</a></p>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <div id="chat-modal" class="hidden fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-lg h-[90vh] flex flex-col">
+            <header class="p-4 border-b flex justify-between items-center">
+                <h3 class="text-xl font-bold text-gray-800">Chat with <span id="chat-partner-name"></span></h3>
+                <button id="close-chat-button" class="text-gray-500 hover:text-gray-800 text-2xl leading-none">&times;</button>
+            </header>
+            <div id="chat-messages" class="flex-1 p-4 overflow-y-auto flex flex-col space-y-2">
+                </div>
+            <footer class="p-4 border-t">
+                <form id="chat-form" class="flex space-x-2">
+                    <input type="text" id="chat-input" placeholder="Type a message..." class="flex-1 px-4 py-2 bg-gray-100 border rounded-full focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    <button type="submit" class="doctor-primary-bg text-white font-bold py-2 px-4 rounded-full doctor-primary-hover transition-colors">Send</button>
+                </form>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const API_BASE_URL = 'https://matru-care-backend.onrender.com';
+        let socket;
+
+        // --- Element Selectors ---
+        const mainApp = document.getElementById('main-app');
+        const doctorDashboard = document.getElementById('doctor-dashboard');
+        const formsSection = document.getElementById('forms-section');
+        const loginFormContainer = document.getElementById('login-form-container');
+        const registerFormContainer = document.getElementById('register-form-container');
+        const loginForm = document.getElementById('login-form');
+        const registerForm = document.getElementById('register-form');
+        const loginError = document.getElementById('login-error');
+        const registerError = document.getElementById('register-error');
+        const showRegisterLink = document.getElementById('show-register');
+        const showLoginLink = document.getElementById('show-login');
+        const logoutButton = document.getElementById('logout-button');
+        const doctorLogoutButton = document.getElementById('doctor-logout-button');
+        const profileButton = document.getElementById('profile-button');
+        const profileDropdown = document.getElementById('profile-dropdown');
+        const doctorProfileButton = document.getElementById('doctor-profile-button');
+        const doctorProfileDropdown = document.getElementById('doctor-profile-dropdown');
+        const updateProfileLink = document.getElementById('update-profile-link');
+        const doctorNameSpan = document.getElementById('doctor-name');
+        const motherNameSpan = document.getElementById('mother-name');
+        const patientsListDiv = document.getElementById('patients-list');
+        const tabPatients = document.getElementById('tab-patients');
+        const tabAppointments = document.getElementById('tab-appointments');
+        const tabMessages = document.getElementById('tab-messages');
+        const patientsContent = document.getElementById('patients-content');
+        const appointmentsContent = document.getElementById('appointments-content');
+        const messagesContent = document.getElementById('messages-content');
+        const messageList = document.getElementById('message-list');
+        const messagesNotificationBadge = document.getElementById('messages-notification-badge');
+        const doctorDetailsContent = document.getElementById('doctor-details-content');
+
+        // --- Chat Elements ---
+        const chatModal = document.getElementById('chat-modal');
+        const closeChatButton = document.getElementById('close-chat-button');
+        const chatPartnerName = document.getElementById('chat-partner-name');
+        const chatMessagesDiv = document.getElementById('chat-messages');
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const motherChatButton = document.getElementById('mother-chat-button');
+        let currentChatPartner = null;
+
+        // --- UI TOGGLE FUNCTIONS ---
+        const showMotherApp = (userData) => {
+            mainApp.classList.remove('hidden');
+            doctorDashboard.classList.add('hidden');
+            formsSection.classList.add('hidden');
+            motherNameSpan.textContent = userData.name;
+        };
+        const showDoctorApp = (userData) => {
+            mainApp.classList.add('hidden');
+            doctorDashboard.classList.remove('hidden');
+            formsSection.classList.add('hidden');
+            doctorNameSpan.textContent = userData.name;
+            fetchPatients(userData.token);
+        };
+        const showForms = () => {
+            mainApp.classList.add('hidden');
+            doctorDashboard.classList.add('hidden');
+            formsSection.classList.remove('hidden');
+            loginFormContainer.classList.remove('hidden');
+            registerFormContainer.classList.add('hidden');
+        };
+
+        // --- SOCKET.IO & CHAT LOGIC ---
+        // REVISED: This function now handles all socket connections and events
+        const setupSocketConnection = (user) => {
+            if (socket) {
+                socket.disconnect();
+            }
+
+            socket = io(API_BASE_URL, {
+                // You can optionally send the token for authentication with socket middleware
+                auth: { token: localStorage.getItem('matru-care-token') }
+            });
+
+            socket.on('connect', () => {
+                console.log('Socket connected successfully:', socket.id);
+                // Join the user-specific room to receive targeted events
+                socket.emit('join-room', user.id);
+            });
+
+            socket.on('disconnect', () => {
+                console.log('Socket disconnected.');
+            });
+
+            // --- IMPORTANT: LISTEN FOR THE FORCE-LOGOUT EVENT ---
+            socket.on('force-logout', (data) => {
+                console.warn('Force logout event received:', data.message);
+                // 1. Alert the user
+                alert(data.message);
+                // 2. Use the existing logout handler for cleanup and UI update
+                handleLogout();
+            });
+
+            // Listener for incoming chat messages
+            socket.on('receive-chat-message', (data) => {
+                if (chatModal.classList.contains('hidden') || data.sender !== currentChatPartner?.id) {
+                    const patientCard = document.querySelector(`[data-patient-id="${data.sender}"]`);
+                    if(patientCard) {
+                        let badge = patientCard.querySelector('.notification-badge');
+                        if(!badge) {
+                            badge = document.createElement('span');
+                            badge.className = 'notification-badge';
+                            patientCard.querySelector('.chat-btn').parentElement.style.position = 'relative';
+                            patientCard.querySelector('.chat-btn').parentElement.appendChild(badge);
+                        }
+                        badge.textContent = (parseInt(badge.textContent) || 0) + 1;
+                        badge.classList.remove('hidden');
+                    }
+                    messagesNotificationBadge.classList.remove('hidden');
+                } else {
+                    appendMessage(data.message, 'received');
+                }
+                if (messagesContent.offsetParent !== null) {
+                    fetchAndDisplayMessages();
+                }
+            });
+        };
+
+        const openChat = async (partner) => {
+            currentChatPartner = partner;
+            chatPartnerName.textContent = partner.name;
+            chatMessagesDiv.innerHTML = ''; // Clear previous messages
+            chatModal.classList.remove('hidden');
+
+            const patientCard = document.querySelector(`[data-patient-id="${partner.id}"]`);
+            if (patientCard) {
+                const badge = patientCard.querySelector('.notification-badge');
+                if (badge) {
+                    badge.textContent = '';
+                    badge.classList.add('hidden');
+                }
+            }
+
+            const token = localStorage.getItem('matru-care-token');
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/chat/history/${partner.id}`, {
+                    headers: { 'x-auth-token': token }
+                });
+                const messages = await response.json();
+                const currentUser = JSON.parse(localStorage.getItem('matru-care-user'));
+                messages.forEach(msg => {
+                    const type = msg.sender._id === currentUser.id ? 'sent' : 'received';
+                    appendMessage(msg.message, type);
+                });
+            } catch (error) {
+                chatMessagesDiv.innerHTML = '<p class="text-red-500">Could not load chat history.</p>';
+            }
+        };
+
+        const appendMessage = (message, type) => {
+            const bubbleClass = type === 'sent' ? 'chat-bubble-sent self-end' : 'chat-bubble-received self-start';
+            const messageEl = `<div class="max-w-xs md:max-w-md p-3 w-auto ${bubbleClass}">${message}</div>`;
+            chatMessagesDiv.insertAdjacentHTML('beforeend', messageEl);
+            chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
+        };
+
+        chatForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const message = chatInput.value.trim();
+            if (message && currentChatPartner) {
+                const token = localStorage.getItem('matru-care-token');
+                fetch(`${API_BASE_URL}/api/chat/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
+                    body: JSON.stringify({ receiverId: currentChatPartner.id, message }),
+                });
+                appendMessage(message, 'sent');
+                chatInput.value = '';
+            }
+        });
+
+        closeChatButton.addEventListener('click', () => {
+            chatModal.classList.add('hidden');
+            currentChatPartner = null;
+        });
+
+        // --- AUTHENTICATION LOGIC ---
+        const checkLoginStatus = () => {
+            const token = localStorage.getItem('matru-care-token');
+            const user = JSON.parse(localStorage.getItem('matru-care-user'));
+            if (token && user) {
+                // Call the new, comprehensive socket setup function
+                setupSocketConnection(user);
+                if (user.status === 'Doctor') {
+                    showDoctorApp({ ...user, token });
+                } else {
+                    showMotherApp(user);
+                }
+            } else {
+                showForms();
+            }
+        };
+
+        const handleLogout = () => {
+            if (socket) socket.disconnect();
+            localStorage.removeItem('matru-care-token');
+            localStorage.removeItem('matru-care-user');
+            showForms();
+        };
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            loginError.classList.add('hidden');
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password }),
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.msg || 'Login failed');
+                localStorage.setItem('matru-care-token', data.token);
+                localStorage.setItem('matru-care-user', JSON.stringify(data.user));
+                checkLoginStatus();
+            } catch (error) {
+                loginError.textContent = error.message;
+                loginError.classList.remove('hidden');
+            }
+        });
+
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            registerError.classList.add('hidden');
+            const name = document.getElementById('register-name').value;
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+            const status = document.getElementById('register-status').value;
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, password, status }),
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.msg || 'Registration failed');
+                localStorage.setItem('matru-care-token', data.token);
+                localStorage.setItem('matru-care-user', JSON.stringify(data.user));
+                checkLoginStatus();
+            } catch (error) {
+                registerError.textContent = error.message;
+                registerError.classList.remove('hidden');
+            }
+        });
+
+        // --- DOCTOR & MOTHER DASHBOARD LOGIC ---
+        const fetchPatients = async (token) => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/doctor/patients`, {
+                    headers: { 'x-auth-token': token }
+                });
+                if (!response.ok) throw new Error('Failed to fetch patients');
+                const patients = await response.json();
+                displayPatients(patients);
+            } catch (error) {
+                patientsListDiv.innerHTML = `<p class="text-red-500">${error.message}</p>`;
+            }
+        };
+
+        const displayPatients = (patients) => {
+            patientsListDiv.innerHTML = '';
+            if (patients.length === 0) {
+                patientsListDiv.innerHTML = '<p class="text-gray-500">You have no assigned patients.</p>';
+                return;
+            }
+            patients.forEach(patient => {
+                const patientCard = document.createElement('div');
+                patientCard.className = 'bg-white p-4 rounded-lg shadow-md flex items-center justify-between';
+                patientCard.setAttribute('data-patient-id', patient.userId);
+                patientCard.innerHTML = `
+                    <div class="flex items-center">
+                        <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mr-4">
+                            <span class="text-xl font-bold doctor-primary">${patient.name.charAt(0)}</span>
+                        </div>
+                        <div>
+                            <p class="font-bold text-gray-800">${patient.name}</p>
+                            <p class="text-sm text-gray-500">${patient.email}</p>
+                        </div>
+                    </div>
+                    <div class="flex space-x-2 relative">
+                        <button title="Chat" class="chat-btn p-2 rounded-full hover:bg-gray-200 transition">
+                            <i class="fas fa-comment-dots text-gray-600"></i>
+                        </button>
+                        <button title="Video Call" class="p-2 rounded-full hover:bg-gray-200 transition">
+                            <i class="fas fa-video text-gray-600"></i>
+                        </button>
+                    </div>
+                `;
+                patientCard.querySelector('.chat-btn').addEventListener('click', () => {
+                    openChat({ id: patient.userId, name: patient.name });
+                });
+                patientsListDiv.appendChild(patientCard);
+            });
+        };
+
+        const fetchAndDisplayMessages = async () => {
+            const token = localStorage.getItem('matru-care-token');
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/doctor/patients`, {
+                    headers: { 'x-auth-token': token }
+                });
+                if (!response.ok) throw new Error('Failed to fetch patients for messaging.');
+                const patients = await response.json();
+
+                messageList.innerHTML = '';
+                if (patients.length === 0) {
+                    messageList.innerHTML = '<p class="text-gray-500">You have no patients to message.</p>';
+                    return;
+                }
+
+                patients.forEach(patient => {
+                    const messageCard = document.createElement('div');
+                    messageCard.className = 'bg-white p-4 rounded-lg shadow-md flex items-center justify-between cursor-pointer hover:bg-gray-50';
+                    messageCard.innerHTML = `
+                        <div class="flex items-center">
+                            <div class="w-12 h-12 rounded-full bg-pink-100 flex items-center justify-center mr-4">
+                                <span class="text-xl font-bold matru-pink">${patient.name.charAt(0)}</span>
+                            </div>
+                            <div>
+                                <p class="font-bold text-gray-800">${patient.name}</p>
+                                <p class="text-sm text-gray-500">Click to open chat</p>
+                            </div>
+                        </div>
+                        <div class="text-xs text-gray-400">
+                            <i class="fas fa-arrow-right"></i>
+                        </div>
+                    `;
+                    messageCard.addEventListener('click', () => {
+                        openChat({ id: patient.userId, name: patient.name });
+                        switchTab('patients');
+                    });
+                    messageList.appendChild(messageCard);
+                });
+            } catch (error) {
+                messageList.innerHTML = `<p class="text-red-500">${error.message}</p>`;
+            }
+        };
+        
+        motherChatButton.addEventListener('click', async () => {
+            const token = localStorage.getItem('matru-care-token');
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/mother/doctor`, {
+                    headers: { 'x-auth-token': token }
+                });
+                if (!response.ok) throw new Error('Could not find assigned doctor.');
+                const doctor = await response.json();
+                openChat({ id: doctor.userId, name: `Dr. ${doctor.name}` });
+            } catch (error) {
+                alert(error.message);
+            }
+        });
+
+        const switchTab = (activeTab) => {
+            [tabPatients, tabAppointments, tabMessages].forEach(tab => {
+                tab.classList.remove('border-blue-500', 'text-blue-600');
+                tab.classList.add('border-transparent', 'text-gray-500');
+            });
+            [patientsContent, appointmentsContent, messagesContent, doctorDetailsContent].forEach(content => content.classList.add('hidden'));
+
+            if (activeTab === 'patients') {
+                tabPatients.classList.add('border-blue-500', 'text-blue-600');
+                patientsContent.classList.remove('hidden');
+            } else if (activeTab === 'appointments') {
+                tabAppointments.classList.add('border-blue-500', 'text-blue-600');
+                appointmentsContent.classList.remove('hidden');
+            } else if (activeTab === 'messages') {
+                tabMessages.classList.add('border-blue-500', 'text-blue-600');
+                messagesContent.classList.remove('hidden');
+                messagesNotificationBadge.classList.add('hidden');
+                fetchAndDisplayMessages();
+            } else if (activeTab === 'details') {
+                doctorDetailsContent.classList.remove('hidden');
+            }
+        };
+
+        // --- EVENT LISTENERS ---
+        logoutButton.addEventListener('click', handleLogout);
+        doctorLogoutButton.addEventListener('click', handleLogout);
+        showRegisterLink.addEventListener('click', (e) => { e.preventDefault(); loginFormContainer.classList.add('hidden'); registerFormContainer.classList.remove('hidden'); });
+        showLoginLink.addEventListener('click', (e) => { e.preventDefault(); registerFormContainer.classList.add('hidden'); loginFormContainer.classList.remove('hidden'); });
+        profileButton.addEventListener('click', (e) => { e.stopPropagation(); profileDropdown.classList.toggle('hidden'); });
+        doctorProfileButton.addEventListener('click', (e) => { e.stopPropagation(); doctorProfileDropdown.classList.toggle('hidden'); });
+        document.addEventListener('click', () => {
+            if (!profileDropdown.classList.contains('hidden')) profileDropdown.classList.add('hidden');
+            if (!doctorProfileDropdown.classList.contains('hidden')) doctorProfileDropdown.classList.add('hidden');
+        });
+        tabPatients.addEventListener('click', () => switchTab('patients'));
+        tabAppointments.addEventListener('click', () => switchTab('appointments'));
+        tabMessages.addEventListener('click', () => switchTab('messages'));
+        updateProfileLink.addEventListener('click', (e) => { e.preventDefault(); switchTab('details'); doctorProfileDropdown.classList.add('hidden'); });
+
+        // --- INITIALIZATION ---
+        checkLoginStatus();
+    });
+</script>
+</body>
+</html>
